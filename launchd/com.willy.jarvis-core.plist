@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.willy.jarvis-core</string>
+    <key>Comment</key>
+    <string>William Agent — JarvisCore daemon</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/willy/jarvis-core/.venv/bin/python</string>
+      <string>-m</string>
+      <string>uvicorn</string>
+      <string>jarvis.main:app</string>
+      <string>--host</string>
+      <string>127.0.0.1</string>
+      <string>--port</string>
+      <string>8787</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/willy/jarvis-core</string>
+    <key>StandardOutPath</key>
+    <string>/Users/willy/jarvis-core/logs/jarvis.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/willy/jarvis-core/logs/jarvis.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>HOME</key>
+      <string>/Users/willy</string>
+      <key>PATH</key>
+      <string>/Users/willy/jarvis-core/.venv/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+      <key>JARVIS_OLLAMA_MODEL</key>
+      <string>llama3.2:3b</string>
+    </dict>
+  </dict>
+</plist>

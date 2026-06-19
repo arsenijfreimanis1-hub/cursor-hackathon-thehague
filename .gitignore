@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+!.env.example
+data/
+logs/
+.DS_Store
+macos-helper/JarvisHelper.app/
+macos-helper/.build/

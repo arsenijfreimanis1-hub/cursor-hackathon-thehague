@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>William Agent</title>
+  <style>
+    :root { --bg: #0f1117; --card: #1a1d27; --text: #e8eaed; --muted: #9aa0a6; --accent: #4f8cff; --ok: #34a853; --warn: #fbbc04; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #2a2f3a; display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0; font-size: 1.25rem; }
+    .status { font-size: 0.85rem; color: var(--muted); }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem 1.5rem 2rem; max-width: 1200px; margin: 0 auto; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border-radius: 12px; padding: 1rem; border: 1px solid #2a2f3a; }
+    .card h2 { margin: 0 0 0.75rem; font-size: 0.95rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .chat { grid-column: 1 / -1; }
+    textarea { width: 100%; min-height: 80px; background: #12151c; color: var(--text); border: 1px solid #2a2f3a; border-radius: 8px; padding: 0.75rem; resize: vertical; font: inherit; }
+    button { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 0.6rem 1rem; font: inherit; cursor: pointer; margin-top: 0.5rem; }
+    button:hover { filter: brightness(1.1); }
+    .reply { margin-top: 0.75rem; padding: 0.75rem; background: #12151c; border-radius: 8px; white-space: pre-wrap; min-height: 2rem; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 0.6rem 0; border-bottom: 1px solid #2a2f3a; font-size: 0.9rem; }
+    li:last-child { border-bottom: none; }
+    .badge { display: inline-block; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 999px; background: #2a2f3a; margin-left: 0.4rem; }
+    .badge.pending { color: var(--warn); }
+    .badge.done, .badge.approved { color: var(--ok); }
+    .badge.denied { color: #ea4335; }
+    .actions { margin-top: 0.4rem; }
+    .actions button { margin-right: 0.4rem; margin-top: 0; font-size: 0.8rem; padding: 0.35rem 0.6rem; }
+    .deny { background: #5f6368; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🤖 William Agent</h1>
+    <div class="status" id="status">Checking…</div>
+  </header>
+  <main>
+    <section class="card chat">
+      <h2>Chat (routed: Ollama → Cursor)</h2>
+      <textarea id="message" placeholder="Ask William Agent anything…"></textarea>
+      <button id="send">Send</button>
+      <div class="reply" id="reply"></div>
+    </section>
+    <section class="card">
+      <h2>Task queue</h2>
+      <ul id="tasks"></ul>
+    </section>
+    <section class="card">
+      <h2>Approval inbox</h2>
+      <ul id="approvals"></ul>
+    </section>
+    <section class="card">
+      <h2>Known people (Netatmo)</h2>
+      <ul id="people"></ul>
+      <p style="color:var(--muted);font-size:0.8rem;margin:0.5rem 0 0">Webhook: <code>/api/netatmo/webhook</code> — run <code>scripts/setup-netatmo-tunnel.sh</code> for HTTPS</p>
+    </section>
+    <section class="card">
+      <h2>Self-improvement</h2>
+      <div id="self-status" style="font-size:0.9rem;margin-bottom:0.5rem">—</div>
+      <textarea id="self-desc" placeholder="Describe a change to JarvisCore…" style="min-height:60px"></textarea>
+      <button onclick="selfPropose()">Propose change (sandbox branch)</button>
+    </section>
+    <section class="card">
+      <h2>Desktop vision</h2>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.5rem">Screenshot → Ollama vision → approval before action</p>
+      <button onclick="analyzeDesktop()">Analyze screen</button>
+      <div id="desktop-result" class="reply" style="min-height:1rem;margin-top:0.5rem"></div>
+    </section>
+    <section class="card">
+      <h2>Scheduler</h2>
+      <div id="scheduler" style="font-size:0.9rem">—</div>
+      <button onclick="triggerBriefing()">Test morning briefing</button>
+    </section>
+    <section class="card">
+      <h2>macOS helper</h2>
+      <div id="helper" style="font-size:0.9rem">Checking…</div>
+      <button onclick="testNotify()">Test notification</button>
+    </section>
+  </main>
+  <script>
+    async function refresh() {
+      const health = await fetch('/api/health').then(r => r.json());
+      const ollama = health.ollama?.ok ? `Ollama OK` : `Ollama offline`;
+      const helper = health.macos_helper?.ok ? `Helper OK` : `Helper offline`;
+      const cursor = health.cursor?.configured ? 'Cursor OK' : 'Cursor key missing';
+      const briefing = health.scheduler?.jobs?.[0]?.next_run;
+      document.getElementById('status').textContent = `${health.agent} · ${ollama} · ${helper} · ${cursor} · :${health.port}`;
+      document.getElementById('scheduler').textContent = briefing
+        ? `Next briefing: ${briefing}`
+        : 'Scheduler starting…';
+
+      const self = await fetch('/api/self/status').then(r => r.json());
+      document.getElementById('self-status').textContent = self.on_sandbox
+        ? `Branch: ${self.branch} (sandbox)`
+        : `Branch: ${self.branch}`;
+      document.getElementById('helper').textContent = health.macos_helper?.ok
+        ? `Running on port ${health.macos_helper.port || 8788}`
+        : `Offline — run scripts/install-helper.sh`;
+
+      const people = await fetch('/api/people').then(r => r.json());
+      document.getElementById('people').innerHTML = people.length
+        ? people.map(p => `<li><strong>${p.name}</strong><span class="badge done">known</span><br><small>${p.netatmo_id || 'manual'} · last seen ${p.last_seen_at || 'never'}</small></li>`).join('')
+        : '<li>No people stored yet</li>';
+
+      const tasks = await fetch('/api/tasks').then(r => r.json());
+      document.getElementById('tasks').innerHTML = tasks.length
+        ? tasks.map(t => `<li><strong>${t.title}</strong><span class="badge ${t.status}">${t.status}</span><br><small>${t.source} · ${t.created_at}</small></li>`).join('')
+        : '<li>No tasks yet</li>';
+
+      const approvals = await fetch('/api/approvals?status=pending').then(r => r.json());
+      document.getElementById('approvals').innerHTML = approvals.length
+        ? approvals.map(a => `<li><strong>${a.action}</strong><span class="badge pending">pending</span><br>${a.detail || ''}<div class="actions"><button onclick="resolve(${a.id}, true)">Approve</button><button class="deny" onclick="resolve(${a.id}, false)">Deny</button></div></li>`).join('')
+        : '<li>Nothing pending</li>';
+    }
+
+    async function resolve(id, approved) {
+      await fetch(`/api/approvals/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approved }) });
+      refresh();
+    }
+
+    async function selfPropose() {
+      const description = document.getElementById('self-desc').value.trim();
+      if (!description) return;
+      document.getElementById('self-status').textContent = 'Working in sandbox branch…';
+      const res = await fetch('/api/self/propose', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description }) }).then(r => r.json());
+      document.getElementById('self-status').textContent = res.ok
+        ? `Branch ${res.branch} — approve merge in inbox`
+        : (res.error || JSON.stringify(res));
+      document.getElementById('self-desc').value = '';
+      refresh();
+    }
+
+    async function analyzeDesktop() {
+      document.getElementById('desktop-result').textContent = 'Capturing screen…';
+      const res = await fetch('/api/desktop/analyze', { method: 'POST' }).then(r => r.json());
+      document.getElementById('desktop-result').textContent = res.analysis || res.error || res.hint || JSON.stringify(res);
+      refresh();
+    }
+
+    async function triggerBriefing() {
+      await fetch('/api/scheduler/briefing', { method: 'POST' });
+      refresh();
+    }
+
+    async function testNotify() {
+      await fetch('/api/macos/notify?title=William%20Agent&message=Helper%20is%20working', { method: 'POST' });
+    }
+
+    document.getElementById('send').onclick = async () => {
+      const message = document.getElementById('message').value.trim();
+      if (!message) return;
+      document.getElementById('reply').textContent = 'Thinking…';
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) }).then(r => r.json());
+      document.getElementById('reply').textContent = (res.engine ? `[${res.engine}] ` : '') + (res.reply || res.error || JSON.stringify(res));
+      document.getElementById('message').value = '';
+      refresh();
+    };
+
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>
