@@ -1,0 +1,105 @@
+"""Structured schemas for William's persisted specialist agents."""
+
+from __future__ import annotations
+
+import re
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+KNOWN_AGENT_TOOLS = frozenset(
+    {
+        "cursor_agent.run",
+        "memory.retrieve",
+        "memory.store",
+        "system_control.execute",
+        "terminal.execute",
+        "web.research",
+    }
+)
+
+
+def normalize_agent_name(name: str) -> str:
+    cleaned = re.sub(r"\s+", " ", name.strip())
+    if not cleaned:
+        raise ValueError("agent name cannot be empty")
+    return cleaned
+
+
+def agent_name_key(name: str) -> str:
+    normalized = normalize_agent_name(name).lower()
+    return re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")
+
+
+class AgentRuntimeConfig(BaseModel):
+    execution_engine: Literal["cursor"] = "cursor"
+    autonomy_mode: Literal["supervised", "assisted"] = "supervised"
+    model: str | None = None
+    workspace_dir: str | None = None
+    allowed_tools: list[str] = Field(default_factory=lambda: ["cursor_agent.run"])
+
+    @field_validator("allowed_tools")
+    @classmethod
+    def validate_allowed_tools(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            tool = str(item or "").strip()
+            if not tool:
+                continue
+            if tool not in KNOWN_AGENT_TOOLS:
+                raise ValueError(f"unknown tool allowlist entry: {tool}")
+            if tool not in seen:
+                cleaned.append(tool)
+                seen.add(tool)
+        if "cursor_agent.run" not in seen:
+            cleaned.insert(0, "cursor_agent.run")
+        return cleaned
+
+
+class AgentSpec(BaseModel):
+    name: str
+    purpose: str
+    instructions: str
+    trigger_phrases: list[str] = Field(default_factory=list)
+    status: Literal["active", "archived", "disabled"] = "active"
+    runtime: AgentRuntimeConfig = Field(default_factory=AgentRuntimeConfig)
+    parent_agent_id: int | None = None
+    learning_notes: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        return normalize_agent_name(value)
+
+    @field_validator("purpose", "instructions", "learning_notes")
+    @classmethod
+    def trim_text(cls, value: str) -> str:
+        return str(value or "").strip()
+
+    @field_validator("trigger_phrases")
+    @classmethod
+    def normalize_trigger_phrases(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            phrase = str(raw or "").strip()
+            if not phrase:
+                continue
+            lowered = phrase.lower()
+            if lowered in seen:
+                continue
+            cleaned.append(phrase)
+            seen.add(lowered)
+        return cleaned
+
+
+class AgentRecord(AgentSpec):
+    id: int
+    name_key: str
+    version: int = 1
+    performance_score: float = 0.0
+    last_used_at: str | None = None
+    last_improved_at: str | None = None
+    created_at: str
+    updated_at: str

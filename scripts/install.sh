@@ -18,11 +18,18 @@ PLIST_SRC="launchd/com.willy.jarvis-core.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/com.willy.jarvis-core.plist"
 
 mkdir -p logs data
-cp "$PLIST_SRC" "$PLIST_DST"
+chmod +x scripts/*.sh
+./scripts/sync-launchd-env.sh
 
 launchctl bootout "gui/$(id -u)/com.willy.jarvis-core" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST_DST"
-launchctl enable "gui/$(id -u)/com.willy.jarvis-core"
-launchctl kickstart -k "gui/$(id -u)/com.willy.jarvis-core"
+sleep 1
+if ! launchctl bootstrap "gui/$(id -u)" "$PLIST_DST" 2>/dev/null; then
+  launchctl bootout "gui/$(id -u)/com.willy.jarvis-core" 2>/dev/null || true
+  sleep 1
+  launchctl bootstrap "gui/$(id -u)" "$PLIST_DST"
+fi
+launchctl enable "gui/$(id -u)/com.willy.jarvis-core" 2>/dev/null || true
+launchctl kickstart -k "gui/$(id -u)/com.willy.jarvis-core" 2>/dev/null || \
+  launchctl kickstart "gui/$(id -u)/com.willy.jarvis-core"
 
 echo "JarvisCore installed. Panel: http://127.0.0.1:8787"

@@ -12,6 +12,8 @@
     <true/>
     <key>ThrottleInterval</key>
     <integer>5</integer>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
     <key>ProgramArguments</key>
     <array>
       <string>/Users/willy/jarvis-core/.venv/bin/python</string>
@@ -36,7 +38,7 @@
       <key>PATH</key>
       <string>/Users/willy/jarvis-core/.venv/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
       <key>JARVIS_OLLAMA_MODEL</key>
-      <string>llama3.2:3b</string>
+      <string>llama3.1:8b</string>
     </dict>
   </dict>
 </plist>

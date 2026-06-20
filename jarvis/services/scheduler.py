@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from jarvis.config import settings
-from jarvis.services import approvals, macos, tasks
+from jarvis.services import approvals, event_log, learning, macos, memory, notion_sync, screen_observer, tasks
 
 scheduler = AsyncIOScheduler(timezone=ZoneInfo(settings.timezone))
 
@@ -12,11 +12,57 @@ async def morning_briefing() -> None:
     pending = await approvals.list_approvals(status="pending")
     recent = await tasks.list_tasks(limit=5)
     msg = (
-        f"Good morning Willy. {len(pending)} items need approval. "
+        f"Good morning, boss. {len(pending)} items await your approval. "
         f"{len(recent)} recent tasks in the queue."
     )
     await macos.notify(settings.agent_name, msg, speak=True)
     await tasks.create_task(title="Morning briefing", body=msg, source="scheduler")
+
+
+async def learning_report_refresh() -> None:
+    await learning.periodic_refresh()
+
+
+async def memory_compression() -> None:
+    result = await memory.compress_stale_sessions()
+    if result.get("compressed", 0) > 0:
+        await tasks.create_task(
+            title="Memory compressed",
+            body=f"{result['compressed']} conversations summarized",
+            source="memory",
+        )
+
+
+async def notion_export() -> None:
+    if not notion_sync.configured():
+        return
+    events = await event_log.list_events(limit=30)
+    if len(events) < 5:
+        return
+    result = await notion_sync.export_recent_events(events)
+    if result.get("ok"):
+        await tasks.create_task(
+            title="Notion event export",
+            body=f"Exported {len(events)} events",
+            source="notion",
+        )
+
+
+async def screen_observer_tick() -> None:
+    if not settings.screen_watch_enabled:
+        return
+    await screen_observer.observer_tick()
+
+
+async def voice_watchdog() -> None:
+    """Keep William's voice pipeline alive 24/7."""
+    from jarvis.services import ollama
+
+    core = await ollama.health()
+    if not core.get("ok"):
+        await macos.restart_core_service()
+
+    await macos.ensure_voice_awake()
 
 
 def start() -> None:
@@ -28,6 +74,41 @@ def start() -> None:
         hour=settings.briefing_hour,
         minute=0,
         id="morning_briefing",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        learning_report_refresh,
+        "interval",
+        hours=settings.learning_report_interval_hours,
+        id="learning_report",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        memory_compression,
+        "interval",
+        hours=settings.memory_compress_interval_hours,
+        id="memory_compression",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        voice_watchdog,
+        "interval",
+        minutes=settings.voice_watchdog_interval_minutes,
+        id="voice_watchdog",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        notion_export,
+        "interval",
+        hours=settings.notion_export_interval_hours,
+        id="notion_export",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        screen_observer_tick,
+        "interval",
+        seconds=settings.screen_observer_interval_seconds,
+        id="screen_observer",
         replace_existing=True,
     )
     scheduler.start()

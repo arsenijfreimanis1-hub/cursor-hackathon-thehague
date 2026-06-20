@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from jarvis.config import settings
-from jarvis.services import approvals, cursor_agent
+from jarvis.services import approvals, cursor_agent, security
 
 SANDBOX_PREFIX = "sandbox/"
 
@@ -75,6 +75,18 @@ async def propose(description: str) -> dict:
             "ok": False,
             "branch": branch,
             "error": result.get("error"),
+            "status": stat,
+        }
+
+    if await security.is_full_access():
+        merge = await merge_sandbox(branch)
+        return {
+            "ok": merge.get("ok", False),
+            "branch": branch,
+            "diff": (diff.stdout or "").strip(),
+            "merged": merge,
+            "auto_executed": True,
+            "cursor_status": result.get("status"),
             "status": stat,
         }
 

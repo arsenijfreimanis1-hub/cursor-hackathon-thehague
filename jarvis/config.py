@@ -5,6 +5,32 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parent.parent
 
+_PLACEHOLDER_KEYS = frozenset({"cursor_...", "cursor_…", "your_key_here", "changeme"})
+
+
+def _read_env_file(key: str) -> str:
+    path = ROOT / ".env"
+    if not path.is_file():
+        return ""
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if not line.startswith(f"{key}="):
+            continue
+        return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
+
+
+def is_cursor_key_valid(key: str) -> bool:
+    if not key:
+        return False
+    if key.lower() in _PLACEHOLDER_KEYS or key.endswith("..."):
+        return False
+    return len(key) >= 24 and (
+        key.startswith("cursor_") or key.startswith("crsr_") or key.startswith("key_")
+    )
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JARVIS_", env_file=ROOT / ".env", extra="ignore")
@@ -14,7 +40,7 @@ class Settings(BaseSettings):
     data_dir: Path = ROOT / "data"
     workspace_dir: Path = ROOT
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "llama3.2:3b"
+    ollama_model: str = "llama3.1:8b"
     ollama_vision_model: str = "moondream"
     agent_name: str = "William Agent"
     openclaw_gateway_url: str = "http://127.0.0.1:18789"
@@ -26,9 +52,64 @@ class Settings(BaseSettings):
     cursor_api_key: str = ""
     timezone: str = "Europe/Amsterdam"
     briefing_hour: int = 8
+    learning_report_interval_hours: int = 4
+    music_provider: str = "spotify"
+    intent_llm_enabled: bool = False
+    intent_regex_threshold: float = 0.85
+    memory_compress_interval_hours: int = 6
+    voice_watchdog_interval_minutes: int = 2
+    notion_api_key: str = ""
+    notion_parent_page_id: str = ""
+    notion_export_interval_hours: int = 12
+    screen_watch_enabled: bool = True
+    screen_capture_interval_seconds: int = 10
+    screen_summary_window_seconds: int = 60
+    screen_screenshot_retention_minutes: int = 30
+    screen_observer_interval_seconds: int = 60
+    screen_semantic_anchor_threshold: float = 0.5
+    screenpipe_bridge_enabled: bool = False
+    screenpipe_base_url: str = "http://127.0.0.1:3030"
+    popup_handler_enabled: bool = True
+    popup_max_attempts: int = 3
+    cursor_trace_enabled: bool = True
+    sleep_junk_threshold_seconds: int = 45
+    sleep_background_speech_seconds: int = 50
 
     def resolved_cursor_api_key(self) -> str:
-        return self.cursor_api_key or os.environ.get("CURSOR_API_KEY", "")
+        for candidate in (
+            self.cursor_api_key,
+            os.environ.get("CURSOR_API_KEY", ""),
+            os.environ.get("JARVIS_CURSOR_API_KEY", ""),
+            _read_env_file("CURSOR_API_KEY"),
+            _read_env_file("JARVIS_CURSOR_API_KEY"),
+        ):
+            if is_cursor_key_valid(candidate):
+                return candidate
+        return ""
+
+    def resolved_notion_api_key(self) -> str:
+        candidates = [
+            self.notion_api_key,
+            os.environ.get("NOTION_API_KEY", ""),
+            _read_env_file("NOTION_API_KEY"),
+            _read_env_file("JARVIS_NOTION_API_KEY"),
+        ]
+        keyfile = Path.home() / ".config" / "notion" / "api_key"
+        if keyfile.is_file():
+            candidates.append(keyfile.read_text(encoding="utf-8").strip())
+        for candidate in candidates:
+            if not candidate or len(candidate) < 20:
+                continue
+            if candidate.startswith("secret_...") or "your_key" in candidate.lower():
+                continue
+            return candidate
+        return ""
+
+    def notion_configured(self) -> bool:
+        return bool(self.resolved_notion_api_key() and self.notion_parent_page_id)
+
+    def cursor_configured(self) -> bool:
+        return bool(self.resolved_cursor_api_key())
 
 
 settings = Settings()

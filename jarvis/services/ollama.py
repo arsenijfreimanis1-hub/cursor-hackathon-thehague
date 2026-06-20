@@ -14,16 +14,26 @@ async def health() -> dict:
             return {"ok": False, "error": str(exc)}
 
 
-async def chat(prompt: str, system: str | None = None) -> str:
-    messages = []
+async def chat(
+    prompt: str | None = None,
+    *,
+    system: str | None = None,
+    messages: list[dict] | None = None,
+) -> str:
+    built: list[dict] = []
     if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
+        built.append({"role": "system", "content": system})
+    if messages:
+        built.extend(messages)
+    elif prompt:
+        built.append({"role": "user", "content": prompt})
+    else:
+        raise ValueError("prompt or messages required")
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
             f"{settings.ollama_base_url}/api/chat",
-            json={"model": settings.ollama_model, "messages": messages, "stream": False},
+            json={"model": settings.ollama_model, "messages": built, "stream": False, "options": {"temperature": 0.1}},
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"]
@@ -41,6 +51,7 @@ async def vision(image_path: str, prompt: str) -> str:
                 "model": settings.ollama_vision_model,
                 "messages": [{"role": "user", "content": prompt, "images": [data]}],
                 "stream": False,
+                "options": {"temperature": 0.1},
             },
         )
         resp.raise_for_status()

@@ -1,0 +1,89 @@
+# Optional local stack for Mac mini 24/7 hosting.
+# William Agent core (8787) + helper (8788) still run via launchd by default.
+# Start extras: docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jarvis-postgres
+    restart: unless-stopped
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: jarvis
+      POSTGRES_PASSWORD: jarvis_local
+      POSTGRES_DB: jarvis
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - jarvis_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    restart: unless-stopped
+    profiles: ["redis"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - jarvis_redis_data:/data
+    command: redis-server --appendonly yes
+
+  backup:
+    image: alpine:3.20
+    container_name: jarvis-backup
+    restart: unless-stopped
+    profiles: ["backup"]
+    volumes:
+      - ./data:/data:ro
+      - ./backups:/backups
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "0 3 * * * cp /data/jarvis.db /backups/jarvis-$$(date +\%Y\%m\%d-\%H\%M).db" > /etc/crontabs/root
+        crond -f -l 2
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: jarvis-caddy
+    restart: unless-stopped
+    profiles: ["proxy", "public-quick", "public-named"]
+    ports:
+      - "0.0.0.0:8080:8080"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  cloudflared-quick:
+    image: cloudflare/cloudflared:latest
+    container_name: jarvis-tunnel-quick
+    restart: unless-stopped
+    profiles: ["public-quick"]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://caddy:8080"]
+    depends_on:
+      - caddy
+
+  cloudflared-named:
+    image: cloudflare/cloudflared:latest
+    container_name: jarvis-tunnel-named
+    restart: unless-stopped
+    profiles: ["public-named"]
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - caddy
+
+volumes:
+  jarvis_pg_data:
+  jarvis_redis_data:
+  caddy_data:
+  caddy_config:

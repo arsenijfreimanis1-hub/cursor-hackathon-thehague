@@ -1,0 +1,11 @@
+# Local reverse proxy → jarvis-core on host :8787
+# Start: ./scripts/docker-stack.sh start
+# Access: http://127.0.0.1:8080
+
+{
+	auto_https off
+}
+
+:8080 {
+	reverse_proxy host.docker.internal:8787
+}

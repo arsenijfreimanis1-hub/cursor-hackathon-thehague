@@ -14,6 +14,21 @@
     <array>
       <string>/Users/willy/jarvis-core/macos-helper/.build/release/JarvisHelper</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>WILLIAM_VOICE_BACKEND</key>
+      <string>apple_legacy</string>
+      <key>WILLIAM_OPENWAKEWORD_COMMAND</key>
+      <string></string>
+      <key>WILLIAM_OPENWAKEWORD_MODEL</key>
+      <string></string>
+      <key>WILLIAM_OPENWAKEWORD_THRESHOLD</key>
+      <string>0.62</string>
+      <key>WILLIAM_WHISPER_COMMAND</key>
+      <string></string>
+      <key>WILLIAM_WHISPER_MODEL</key>
+      <string></string>
+    </dict>
     <key>WorkingDirectory</key>
     <string>/Users/willy/jarvis-core/macos-helper</string>
     <key>StandardOutPath</key>

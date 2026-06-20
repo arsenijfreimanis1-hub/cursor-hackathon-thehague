@@ -13,12 +13,36 @@ async def list_tasks(limit: int = 50) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-async def create_task(title: str, body: str = "", source: str = "web") -> dict:
+async def list_tasks_by_status(status: str, *, limit: int = 10) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "INSERT INTO tasks (title, body, source) VALUES (?, ?, ?)",
-            (title, body, source),
+            "SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, id ASC LIMIT ?",
+            (status, limit),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def create_task(
+    title: str,
+    body: str = "",
+    source: str = "web",
+    *,
+    status: str = "pending",
+    parent_id: int | None = None,
+    batch_id: str | None = None,
+    priority: int = 50,
+    goal_id: int | None = None,
+) -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            INSERT INTO tasks (title, body, source, status, parent_id, batch_id, priority, goal_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (title, body, source, status, parent_id, batch_id, priority, goal_id),
         )
         await db.commit()
         row = await (await db.execute("SELECT * FROM tasks WHERE id = ?", (cursor.lastrowid,))).fetchone()
@@ -35,3 +59,14 @@ async def update_task_status(task_id: int, status: str) -> dict | None:
         await db.commit()
         row = await (await db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))).fetchone()
         return dict(row) if row else None
+
+
+async def list_batch_tasks(batch_id: str) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM tasks WHERE batch_id = ? ORDER BY priority ASC, id ASC",
+            (batch_id,),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]

@@ -9,5 +9,9 @@ let package = Package(
             name: "JarvisHelper",
             path: "Sources/JarvisHelper"
         ),
+        .executableTarget(
+            name: "WilliamKiosk",
+            path: "Sources/WilliamKiosk"
+        ),
     ]
 )

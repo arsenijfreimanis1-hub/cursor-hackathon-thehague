@@ -5,115 +5,748 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>William Agent</title>
   <style>
-    :root { --bg: #0f1117; --card: #1a1d27; --text: #e8eaed; --muted: #9aa0a6; --accent: #4f8cff; --ok: #34a853; --warn: #fbbc04; }
+    :root {
+      --bg: #0b0d12;
+      --card: #141820;
+      --card-hover: #1a1f2a;
+      --text: #eef0f4;
+      --muted: #8b92a0;
+      --accent: #5b8def;
+      --accent-dim: #3d5a9e;
+      --ok: #3dd68c;
+      --warn: #f5c542;
+      --danger: #f07178;
+      --live: #30d158;
+      --border: #252b38;
+      --radius: 14px;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
-    header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #2a2f3a; display: flex; justify-content: space-between; align-items: center; }
-    h1 { margin: 0; font-size: 1.25rem; }
-    .status { font-size: 0.85rem; color: var(--muted); }
-    main { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem 1.5rem 2rem; max-width: 1200px; margin: 0 auto; }
-    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
-    .card { background: var(--card); border-radius: 12px; padding: 1rem; border: 1px solid #2a2f3a; }
-    .card h2 { margin: 0 0 0.75rem; font-size: 0.95rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .chat { grid-column: 1 / -1; }
-    textarea { width: 100%; min-height: 80px; background: #12151c; color: var(--text); border: 1px solid #2a2f3a; border-radius: 8px; padding: 0.75rem; resize: vertical; font: inherit; }
-    button { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 0.6rem 1rem; font: inherit; cursor: pointer; margin-top: 0.5rem; }
-    button:hover { filter: brightness(1.1); }
-    .reply { margin-top: 0.75rem; padding: 0.75rem; background: #12151c; border-radius: 8px; white-space: pre-wrap; min-height: 2rem; }
+    body {
+      margin: 0;
+      font-family: "SF Pro Text", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+
+    header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      background: linear-gradient(180deg, #12151c 0%, var(--bg) 100%);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 0.85rem; min-width: 0; }
+    .brand h1 { margin: 0; font-size: 1.15rem; font-weight: 600; white-space: nowrap; }
+    .brand-sub { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
+
+    .live-badge {
+      display: none;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.7rem 0.35rem 0.55rem;
+      border-radius: 999px;
+      background: rgba(48, 209, 88, 0.12);
+      border: 1px solid rgba(48, 209, 88, 0.35);
+      color: var(--live);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      flex-shrink: 0;
+    }
+    .live-badge.visible { display: inline-flex; }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--live);
+      box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.5);
+      animation: live-pulse 1.6s ease-out infinite;
+    }
+    .live-waves {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 12px;
+    }
+    .live-waves span {
+      display: block;
+      width: 2px;
+      border-radius: 1px;
+      background: var(--live);
+      animation: live-wave 0.9s ease-in-out infinite;
+    }
+    .live-waves span:nth-child(1) { height: 4px; animation-delay: 0s; }
+    .live-waves span:nth-child(2) { height: 9px; animation-delay: 0.15s; }
+    .live-waves span:nth-child(3) { height: 6px; animation-delay: 0.3s; }
+    @keyframes live-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.55); }
+      70% { box-shadow: 0 0 0 8px rgba(48, 209, 88, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0); }
+    }
+    @keyframes live-wave {
+      0%, 100% { transform: scaleY(0.45); opacity: 0.65; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+
+    .header-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.45rem 0.75rem;
+      font: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .icon-btn:hover { background: var(--card-hover); border-color: #3a4254; }
+    .icon-btn.muted { color: var(--danger); border-color: rgba(240, 113, 120, 0.4); background: rgba(240, 113, 120, 0.08); }
+    .icon-btn.full-access {
+      color: var(--warn);
+      border-color: rgba(245, 197, 66, 0.35);
+    }
+    .icon-btn.full-access.active {
+      color: #ffb347;
+      border-color: rgba(255, 149, 0, 0.55);
+      background: rgba(255, 149, 0, 0.12);
+      box-shadow: 0 0 0 1px rgba(255, 149, 0, 0.15);
+    }
+    .icon-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .status-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      justify-content: flex-end;
+      max-width: 420px;
+    }
+    .pill {
+      font-size: 0.68rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .pill.ok { color: var(--ok); border-color: rgba(61, 214, 140, 0.3); }
+    .pill.warn { color: var(--warn); border-color: rgba(245, 197, 66, 0.3); }
+    .pill.off { color: var(--danger); border-color: rgba(240, 113, 120, 0.3); }
+
+    main {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 1rem;
+      padding: 1rem 1.5rem 2.5rem;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--border);
+    }
+    .card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+    }
+    .card.wide { grid-column: 1 / -1; }
+
+    .voice-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+    .voice-state {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      border-radius: 10px;
+      background: #0f1218;
+      border: 1px solid var(--border);
+    }
+    .voice-orb {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1c2230;
+      border: 1px solid var(--border);
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .voice-orb.listening {
+      border-color: rgba(48, 209, 88, 0.5);
+      background: rgba(48, 209, 88, 0.1);
+    }
+    .voice-orb.standby {
+      border-color: rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.1);
+    }
+    .voice-orb.sleeping {
+      border-color: rgba(124, 58, 237, 0.45);
+      background: rgba(124, 58, 237, 0.12);
+      animation: orb-breathe 3.2s ease-in-out infinite;
+    }
+    .voice-orb.awaiting, .voice-orb.conversation {
+      border-color: rgba(34, 197, 94, 0.5);
+      background: rgba(34, 197, 94, 0.12);
+      animation: orb-breathe 1.8s ease-in-out infinite;
+    }
+    .voice-orb.busy, .voice-orb.speaking {
+      border-color: rgba(59, 130, 246, 0.5);
+      background: rgba(59, 130, 246, 0.12);
+      animation: orb-breathe 1.4s ease-in-out infinite;
+    }
+    .voice-orb.animate { animation: orb-breathe 2s ease-in-out infinite; }
+    @keyframes orb-breathe {
+      0%, 100% { transform: scale(1); opacity: 0.92; }
+      50% { transform: scale(1.06); opacity: 1; }
+    }
+    .voice-state-banner {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.35rem;
+    }
+    .voice-state-banner.state-sleeping { opacity: 0.85; }
+    .voice-state-banner.state-standby { opacity: 0.95; }
+    .voice-state-banner.state-awaiting,
+    .voice-state-banner.state-conversation { letter-spacing: 0.1em; }
+    .voice-state-banner.state-offline,
+    .voice-state-banner.state-unhealthy { opacity: 0.75; }
+    .voice-orb.busy {
+      border-color: rgba(91, 141, 239, 0.5);
+      background: rgba(91, 141, 239, 0.1);
+    }
+    .voice-label { font-weight: 600; font-size: 0.92rem; }
+    .voice-detail { font-size: 0.8rem; color: var(--muted); margin-top: 0.15rem; }
+    .voice-meta { font-size: 0.75rem; color: var(--muted); }
+
+    .dictation-feed {
+      min-height: 5.5rem;
+      max-height: 9rem;
+      overflow-y: auto;
+      padding: 0.85rem 0.95rem;
+      background: #0a0d12;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    .dictation-feed.partial { border-color: rgba(48, 209, 88, 0.35); }
+    .dictation-placeholder { color: var(--muted); font-style: italic; }
+    .dictation-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--live);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: cursor-blink 1s step-end infinite;
+    }
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .dictation-final {
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-top: 0.55rem;
+      padding-top: 0.55rem;
+      border-top: 1px solid var(--border);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      background: #0f1218;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      resize: vertical;
+      font: inherit;
+    }
+    textarea:focus { outline: none; border-color: var(--accent-dim); }
+
+    button.primary {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 0.6rem 1rem;
+      font: inherit;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+    button.primary:hover { filter: brightness(1.08); }
+
+    .reply {
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: #0f1218;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      min-height: 2rem;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+    }
+
     ul { list-style: none; padding: 0; margin: 0; }
-    li { padding: 0.6rem 0; border-bottom: 1px solid #2a2f3a; font-size: 0.9rem; }
+    li { padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
     li:last-child { border-bottom: none; }
-    .badge { display: inline-block; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 999px; background: #2a2f3a; margin-left: 0.4rem; }
-    .badge.pending { color: var(--warn); }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      padding: 0.12rem 0.42rem;
+      border-radius: 999px;
+      background: #1e2430;
+      margin-left: 0.35rem;
+      font-weight: 600;
+      text-transform: lowercase;
+    }
+    .badge.pending, .badge.awaiting_approval { color: var(--warn); }
     .badge.done, .badge.approved { color: var(--ok); }
-    .badge.denied { color: #ea4335; }
+    .badge.queued, .badge.running { color: var(--accent); }
+    .badge.failed { color: var(--danger); }
+
+    .task-groups { display: flex; flex-direction: column; gap: 0.5rem; }
+    .task-group {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0f1218;
+    }
+    .task-group summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.55rem 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      font-weight: 600;
+      user-select: none;
+    }
+    .task-group summary::-webkit-details-marker { display: none; }
+    .task-group summary:hover { background: var(--card-hover); }
+    .group-count {
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-weight: 500;
+      background: var(--card);
+      padding: 0.1rem 0.45rem;
+      border-radius: 999px;
+    }
+    .task-group ul { padding: 0 0.75rem 0.35rem; }
+    .task-group li { font-size: 0.82rem; }
+    .task-group li small { color: var(--muted); }
+    .task-empty { color: var(--muted); font-size: 0.85rem; padding: 0.25rem 0; }
+
     .actions { margin-top: 0.4rem; }
-    .actions button { margin-right: 0.4rem; margin-top: 0; font-size: 0.8rem; padding: 0.35rem 0.6rem; }
-    .deny { background: #5f6368; }
+    .actions button {
+      margin-right: 0.4rem;
+      margin-top: 0;
+      font-size: 0.78rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+    }
+    .actions button.deny { background: #4a5060; }
+
+    .session-msgs { margin: 0.5rem 0 0; padding-left: 0; }
+    .session-msgs li { font-size: 0.8rem; padding: 0.35rem 0; }
+    code { font-size: 0.78rem; background: #1e2430; padding: 0.1rem 0.35rem; border-radius: 4px; }
   </style>
 </head>
 <body>
   <header>
-    <h1>🤖 William Agent</h1>
-    <div class="status" id="status">Checking…</div>
+    <div class="brand">
+      <div>
+        <h1>William Agent</h1>
+        <div class="brand-sub" id="agent-sub">JarvisCore · <a href="/" style="color:var(--accent);text-decoration:none">Agent chat →</a></div>
+      </div>
+      <div class="live-badge" id="live-badge" title="Willy is listening for your response">
+        <span class="live-dot"></span>
+        <span class="live-waves" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Live</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn full-access" id="full-access-btn" onclick="toggleFullAccess()" title="Bypass approval gates and unlock system permissions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <span id="full-access-label">Restricted</span>
+      </button>
+      <button class="icon-btn" id="mute-btn" onclick="toggleMute()" title="Mute voice responses">
+        <svg id="mute-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+        </svg>
+        <svg id="mute-icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <line x1="23" y1="9" x2="17" y2="15"></line>
+          <line x1="17" y1="9" x2="23" y2="15"></line>
+        </svg>
+        <span id="mute-label">Voice on</span>
+      </button>
+      <div class="status-pills" id="status-pills"></div>
+    </div>
   </header>
+
   <main>
-    <section class="card chat">
-      <h2>Chat (routed: Ollama → Cursor)</h2>
+    <section class="card wide">
+      <h2>Chat (legacy)</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.65rem">Use the <a href="/" style="color:var(--accent)">agent chat</a> for the main interface.</p>
       <textarea id="message" placeholder="Ask William Agent anything…"></textarea>
-      <button id="send">Send</button>
+      <button class="primary" id="send">Send</button>
       <div class="reply" id="reply"></div>
     </section>
+
+    <section class="card voice-card">
+      <h2>Voice</h2>
+      <div id="voice-banner" class="voice-state-banner">Checking…</div>
+      <div class="voice-state">
+        <div class="voice-orb" id="voice-orb">🎙</div>
+        <div>
+          <div class="voice-label" id="voice-label">Checking…</div>
+          <div class="voice-detail" id="voice-detail">—</div>
+        </div>
+      </div>
+      <div class="voice-meta" id="voice-meta"></div>
+    </section>
+
+    <section class="card">
+      <h2>Live dictation</h2>
+      <div class="dictation-feed" id="dictation-feed">
+        <span class="dictation-placeholder">Waiting for speech…</span>
+      </div>
+      <div class="dictation-final" id="dictation-final"></div>
+    </section>
+
+    <section class="card">
+      <h2>Conversation</h2>
+      <div id="session" style="font-size:0.9rem">—</div>
+    </section>
+
     <section class="card">
       <h2>Task queue</h2>
-      <ul id="tasks"></ul>
+      <div id="tasks" class="task-groups"></div>
     </section>
+
     <section class="card">
       <h2>Approval inbox</h2>
       <ul id="approvals"></ul>
     </section>
+
     <section class="card">
       <h2>Known people (Netatmo)</h2>
       <ul id="people"></ul>
-      <p style="color:var(--muted);font-size:0.8rem;margin:0.5rem 0 0">Webhook: <code>/api/netatmo/webhook</code> — run <code>scripts/setup-netatmo-tunnel.sh</code> for HTTPS</p>
+      <p style="color:var(--muted);font-size:0.78rem;margin:0.5rem 0 0">Webhook: <code>/api/netatmo/webhook</code></p>
     </section>
+
+    <section class="card">
+      <h2>Learning report</h2>
+      <div id="learning-meta" style="font-size:0.82rem;color:var(--muted);margin-bottom:0.5rem">—</div>
+      <pre id="learning-report" style="white-space:pre-wrap;font-size:0.78rem;max-height:220px;overflow:auto;margin:0 0 0.5rem;background:var(--bg);padding:0.65rem;border-radius:8px;border:1px solid var(--border)">—</pre>
+      <button class="primary" onclick="refreshLearning()">Refresh learning report</button>
+    </section>
+
     <section class="card">
       <h2>Self-improvement</h2>
-      <div id="self-status" style="font-size:0.9rem;margin-bottom:0.5rem">—</div>
+      <div id="self-status" style="font-size:0.88rem;margin-bottom:0.5rem">—</div>
       <textarea id="self-desc" placeholder="Describe a change to JarvisCore…" style="min-height:60px"></textarea>
-      <button onclick="selfPropose()">Propose change (sandbox branch)</button>
+      <button class="primary" onclick="selfPropose()">Propose change</button>
     </section>
+
     <section class="card">
       <h2>Desktop vision</h2>
-      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.5rem">Screenshot → Ollama vision → approval before action</p>
-      <button onclick="analyzeDesktop()">Analyze screen</button>
+      <p id="desktop-hint" style="color:var(--muted);font-size:0.82rem;margin:0 0 0.5rem">Screenshot → Ollama vision → approval before action</p>
+      <button class="primary" onclick="analyzeDesktop()">Analyze screen</button>
       <div id="desktop-result" class="reply" style="min-height:1rem;margin-top:0.5rem"></div>
     </section>
+
     <section class="card">
       <h2>Scheduler</h2>
-      <div id="scheduler" style="font-size:0.9rem">—</div>
-      <button onclick="triggerBriefing()">Test morning briefing</button>
+      <div id="scheduler" style="font-size:0.88rem">—</div>
+      <button class="primary" onclick="triggerBriefing()">Test morning briefing</button>
     </section>
+
+    <section class="card">
+      <h2>Terminal</h2>
+      <p id="terminal-hint" style="color:var(--muted);font-size:0.82rem;margin:0 0 0.5rem">Maintenance commands and shell access</p>
+      <textarea id="terminal-cmd" placeholder='e.g. restart jarvis · run brew list · launchctl list | grep willy' style="min-height:52px;font-family:ui-monospace,Menlo,monospace;font-size:0.82rem"></textarea>
+      <button class="primary" onclick="runTerminal()">Run command</button>
+      <button class="primary" onclick="fixServices()" style="margin-left:0.5rem;background:#3a4254">Fix services</button>
+      <div id="terminal-result" class="reply" style="min-height:1rem;margin-top:0.5rem;font-family:ui-monospace,Menlo,monospace;font-size:0.78rem"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Interaction log</h2>
+      <div id="event-stats" style="font-size:0.82rem;color:var(--muted);margin-bottom:0.5rem">—</div>
+      <div id="event-log" style="max-height:280px;overflow:auto;font-size:0.78rem;background:var(--bg);padding:0.65rem;border-radius:8px;border:1px solid var(--border)">—</div>
+      <button class="primary" onclick="exportNotion()" style="margin-top:0.5rem">Export to Notion</button>
+    </section>
+
     <section class="card">
       <h2>macOS helper</h2>
-      <div id="helper" style="font-size:0.9rem">Checking…</div>
-      <button onclick="testNotify()">Test notification</button>
+      <div id="helper" style="font-size:0.88rem">Checking…</div>
+      <button class="primary" onclick="testNotify()">Test notification</button>
     </section>
   </main>
+
+  <script src="/static/voice-ui.js"></script>
   <script>
+    let webSessionId = null;
+    let voiceMuted = false;
+    let fullAccess = false;
+    let refreshTimer = null;
+    let fastRefresh = false;
+
+    const TASK_GROUPS = [
+      { key: 'active', label: 'Active', statuses: ['running', 'queued', 'pending', 'awaiting_approval'], open: true, limit: 8 },
+      { key: 'done', label: 'Completed', statuses: ['done', 'approved'], open: false, limit: 5 },
+      { key: 'failed', label: 'Failed', statuses: ['failed'], open: false, limit: 5 },
+    ];
+
+    function pill(text, kind) {
+      return `<span class="pill ${kind}">${text}</span>`;
+    }
+
+    function setLiveIndicator(visible) {
+      document.getElementById('live-badge').classList.toggle('visible', visible);
+    }
+
+    function setMuteUI(muted) {
+      voiceMuted = muted;
+      const btn = document.getElementById('mute-btn');
+      btn.classList.toggle('muted', muted);
+      document.getElementById('mute-icon-on').style.display = muted ? 'none' : 'block';
+      document.getElementById('mute-icon-off').style.display = muted ? 'block' : 'none';
+      document.getElementById('mute-label').textContent = muted ? 'Muted' : 'Voice on';
+    }
+
+    async function toggleMute() {
+      const next = !voiceMuted;
+      const res = await fetch('/api/macos/mute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ muted: next }),
+      }).then(r => r.json());
+      setMuteUI(res.muted ?? next);
+    }
+
+    function setFullAccessUI(enabled) {
+      fullAccess = enabled;
+      const btn = document.getElementById('full-access-btn');
+      btn.classList.toggle('active', enabled);
+      document.getElementById('full-access-label').textContent = enabled ? 'Full access' : 'Restricted';
+      document.getElementById('desktop-hint').textContent = enabled
+        ? 'Screenshot → Ollama vision → actions run immediately (full access)'
+        : 'Screenshot → Ollama vision → approval before action';
+      const termHint = document.getElementById('terminal-hint');
+      if (termHint) {
+        termHint.textContent = enabled
+          ? 'Full access — any safe terminal command (brew, git, scripts, launchctl)'
+          : 'Maintenance only — restart services, logs, health checks. Enable Full access for brew/git/install.';
+      }
+    }
+
+    async function toggleFullAccess() {
+      const next = !fullAccess;
+      const res = await fetch('/api/security/full-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      }).then(r => r.json());
+      setFullAccessUI(res.full_access ?? next);
+      refresh();
+    }
+
+    function renderDictation(helper) {
+      const feed = document.getElementById('dictation-feed');
+      const finalEl = document.getElementById('dictation-final');
+      const transcript = helper?.live_transcript || '';
+      const partial = helper?.live_transcript_partial === true;
+      const finalText = helper?.last_final_transcript || '';
+
+      if (!transcript && !finalText) {
+        feed.className = 'dictation-feed';
+        feed.innerHTML = '<span class="dictation-placeholder">Waiting for speech…</span>';
+        finalEl.textContent = '';
+        fastRefresh = helper?.listening_for_response === true;
+        return;
+      }
+
+      fastRefresh = partial || helper?.listening_for_response === true;
+      feed.className = 'dictation-feed' + (partial ? ' partial' : '');
+      const cursor = partial ? '<span class="dictation-cursor"></span>' : '';
+      feed.innerHTML = escapeHtml(transcript || finalText) + cursor;
+      finalEl.textContent = finalText && partial && finalText !== transcript
+        ? `Last confirmed: ${finalText}`
+        : finalText && !partial
+        ? `Confirmed: ${finalText}`
+        : '';
+    }
+
+    function scheduleRefresh() {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(async () => {
+        await refresh();
+        scheduleRefresh();
+      }, fastRefresh ? 400 : 3000);
+    }
+
+    const voiceEls = {
+      orb: document.getElementById('voice-orb'),
+      label: document.getElementById('voice-label'),
+      detail: document.getElementById('voice-detail'),
+      banner: document.getElementById('voice-banner'),
+      meta: document.getElementById('voice-meta'),
+    };
+
+    function renderTaskGroups(tasks) {
+      const el = document.getElementById('tasks');
+      if (!tasks.length) {
+        el.innerHTML = '<div class="task-empty">No tasks yet</div>';
+        return;
+      }
+
+      const byStatus = {};
+      for (const t of tasks) {
+        (byStatus[t.status] ||= []).push(t);
+      }
+
+      el.innerHTML = TASK_GROUPS.map(group => {
+        const items = group.statuses.flatMap(s => byStatus[s] || []);
+        if (!items.length) return '';
+        const shown = items.slice(0, group.limit);
+        const extra = items.length - shown.length;
+        const rows = shown.map(t =>
+          `<li><strong>${escapeHtml(t.title)}</strong><span class="badge ${t.status}">${t.status}</span><br><small>${t.source} · ${t.created_at}</small></li>`
+        ).join('');
+        const more = extra > 0 ? `<li style="color:var(--muted);font-size:0.78rem">+${extra} more</li>` : '';
+        return `<details class="task-group" ${group.open ? 'open' : ''}>
+          <summary><span>${group.label}</span><span class="group-count">${items.length}</span></summary>
+          <ul>${rows}${more}</ul>
+        </details>`;
+      }).filter(Boolean).join('') || '<div class="task-empty">No tasks yet</div>';
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     async function refresh() {
+      try {
       const health = await fetch('/api/health').then(r => r.json());
-      const ollama = health.ollama?.ok ? `Ollama OK` : `Ollama offline`;
-      const helper = health.macos_helper?.ok ? `Helper OK` : `Helper offline`;
-      const cursor = health.cursor?.configured ? 'Cursor OK' : 'Cursor key missing';
-      const briefing = health.scheduler?.jobs?.[0]?.next_run;
-      document.getElementById('status').textContent = `${health.agent} · ${ollama} · ${helper} · ${cursor} · :${health.port}`;
-      document.getElementById('scheduler').textContent = briefing
-        ? `Next briefing: ${briefing}`
+      const helper = health.macos_helper || {};
+
+      document.getElementById('agent-sub').textContent = `${health.agent} · :${health.port}`;
+
+      const pills = [];
+      pills.push(pill(health.ollama?.ok ? 'Ollama' : 'Ollama off', health.ollama?.ok ? 'ok' : 'off'));
+      pills.push(pill(helper.ok ? 'Helper' : 'Helper off', helper.ok ? 'ok' : 'off'));
+      pills.push(pill(health.cursor?.configured ? 'Cursor' : 'No Cursor key', health.cursor?.configured ? 'ok' : 'warn'));
+      pills.push(pill(health.worker?.running ? 'Worker' : 'Worker idle', health.worker?.running ? 'ok' : ''));
+      if (health.security?.full_access) pills.push(pill('Full access', 'warn'));
+      document.getElementById('status-pills').innerHTML = pills.join('');
+
+      if (typeof helper.voice_muted === 'boolean') setMuteUI(helper.voice_muted);
+      if (typeof health.security?.full_access === 'boolean') setFullAccessUI(health.security.full_access);
+      const voiceUi = health.voice_ui || { state: 'offline', label: 'Offline', detail: '', color: '#6b7280', animate: false };
+      window.renderVoiceState(voiceEls, voiceUi, { helper, onLiveChange: setLiveIndicator });
+      renderDictation(helper);
+
+      document.getElementById('scheduler').textContent = health.scheduler?.jobs?.length
+        ? health.scheduler.jobs.map(j => `${j.id}: ${j.next_run || 'pending'}`).join(' · ')
         : 'Scheduler starting…';
+
+      const learning = await fetch('/api/learning/report').then(r => r.json());
+      document.getElementById('learning-meta').textContent = learning.last_updated
+        ? `${learning.lesson_count} lessons · ${learning.event_count} struggles · updated ${learning.last_updated}`
+        : `${learning.lesson_count} lessons · ${learning.event_count} struggles`;
+      document.getElementById('learning-report').textContent = learning.report || 'No report yet — struggles will be logged automatically.';
 
       const self = await fetch('/api/self/status').then(r => r.json());
       document.getElementById('self-status').textContent = self.on_sandbox
         ? `Branch: ${self.branch} (sandbox)`
         : `Branch: ${self.branch}`;
-      document.getElementById('helper').textContent = health.macos_helper?.ok
-        ? `Running on port ${health.macos_helper.port || 8788}`
-        : `Offline — run scripts/install-helper.sh`;
+
+      document.getElementById('helper').textContent = helper.ok
+        ? `Port ${helper.port || 8788} · ${helper.wake_word || 'hey willy'} · ${helper.accessibility ? 'accessibility OK' : 'accessibility needed'}`
+        : `Offline — ${helper.error || 'not reachable'}`;
 
       const people = await fetch('/api/people').then(r => r.json());
       document.getElementById('people').innerHTML = people.length
-        ? people.map(p => `<li><strong>${p.name}</strong><span class="badge done">known</span><br><small>${p.netatmo_id || 'manual'} · last seen ${p.last_seen_at || 'never'}</small></li>`).join('')
+        ? people.map(p => `<li><strong>${escapeHtml(p.name)}</strong><span class="badge done">known</span><br><small>${p.netatmo_id || 'manual'} · last seen ${p.last_seen_at || 'never'}</small></li>`).join('')
         : '<li>No people stored yet</li>';
 
+      const session = await fetch('/api/sessions/active?source=voice').then(r => r.json());
+      document.getElementById('session').innerHTML = session.active
+        ? `<div><strong>Session</strong> <code>${session.session.id.slice(0,8)}…</code>`
+          + (session.session.topic ? ` · <em>${escapeHtml(session.session.topic)}</em>` : '') + `</div>`
+          + (session.recent?.length
+            ? '<ul class="session-msgs">' + session.recent.map(m =>
+                `<li><span class="badge">${m.role}</span> ${m.engine ? `<span class="badge">${m.engine}</span> ` : ''}${escapeHtml(m.content.slice(0,80))}</li>`
+              ).join('') + '</ul>'
+            : '<div style="color:var(--muted);margin-top:0.5rem">No messages yet</div>')
+        : '<div style="color:var(--muted)">No active voice session — say "Hey Willy"</div>';
+
       const tasks = await fetch('/api/tasks').then(r => r.json());
-      document.getElementById('tasks').innerHTML = tasks.length
-        ? tasks.map(t => `<li><strong>${t.title}</strong><span class="badge ${t.status}">${t.status}</span><br><small>${t.source} · ${t.created_at}</small></li>`).join('')
-        : '<li>No tasks yet</li>';
+      renderTaskGroups(tasks);
+
+      const events = await fetch('/api/events?limit=25').then(r => r.json());
+      const st = events.stats || {};
+      document.getElementById('event-stats').textContent = st.memory_since
+        ? `${st.total} events since ${st.memory_since} · misaligned: ${st.misaligned || 0}`
+        : 'Loading…';
+      document.getElementById('event-log').innerHTML = (events.events || []).length
+        ? events.events.map(e => {
+            const align = e.alignment_score != null ? ` · align ${(e.alignment_score * 100).toFixed(0)}%` : '';
+            const msg = escapeHtml((e.user_message || e.assistant_reply || '').slice(0, 100));
+            return `<div style="padding:0.35rem 0;border-bottom:1px solid var(--border)"><code>${escapeHtml(e.created_at?.slice(0,16) || '')}</code> <span class="badge">${escapeHtml(e.source)}</span> <span class="badge">${escapeHtml(e.event_type)}</span>${align}<br>${msg}</div>`;
+          }).join('')
+        : '<div style="color:var(--muted)">No events yet — chat and voice are logged from now on.</div>';
 
       const approvals = await fetch('/api/approvals?status=pending').then(r => r.json());
       document.getElementById('approvals').innerHTML = approvals.length
-        ? approvals.map(a => `<li><strong>${a.action}</strong><span class="badge pending">pending</span><br>${a.detail || ''}<div class="actions"><button onclick="resolve(${a.id}, true)">Approve</button><button class="deny" onclick="resolve(${a.id}, false)">Deny</button></div></li>`).join('')
-        : '<li>Nothing pending</li>';
+        ? approvals.map(a => `<li><strong>${escapeHtml(a.action)}</strong><span class="badge pending">pending</span><br>${escapeHtml(a.detail || '')}<div class="actions"><button onclick="resolve(${a.id}, true)">Approve</button><button class="deny" onclick="resolve(${a.id}, false)">Deny</button></div></li>`).join('')
+        : '<li style="color:var(--muted)">Nothing pending</li>';
+      } catch (err) {
+        console.error('refresh failed', err);
+      }
     }
 
     async function resolve(id, approved) {
@@ -127,7 +760,7 @@
       document.getElementById('self-status').textContent = 'Working in sandbox branch…';
       const res = await fetch('/api/self/propose', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description }) }).then(r => r.json());
       document.getElementById('self-status').textContent = res.ok
-        ? `Branch ${res.branch} — approve merge in inbox`
+        ? (res.auto_executed ? `Merged ${res.branch} automatically (full access)` : `Branch ${res.branch} — approve merge in inbox`)
         : (res.error || JSON.stringify(res));
       document.getElementById('self-desc').value = '';
       refresh();
@@ -136,13 +769,57 @@
     async function analyzeDesktop() {
       document.getElementById('desktop-result').textContent = 'Capturing screen…';
       const res = await fetch('/api/desktop/analyze', { method: 'POST' }).then(r => r.json());
-      document.getElementById('desktop-result').textContent = res.analysis || res.error || res.hint || JSON.stringify(res);
+      document.getElementById('desktop-result').textContent = res.executed
+        ? `${res.analysis || ''}\n\nExecuted: ${JSON.stringify(res.side_effect || {})}`
+        : (res.analysis || res.error || res.hint || JSON.stringify(res));
       refresh();
     }
 
     async function triggerBriefing() {
       await fetch('/api/scheduler/briefing', { method: 'POST' });
       refresh();
+    }
+
+    async function refreshLearning() {
+      document.getElementById('learning-meta').textContent = 'Synthesizing lessons from recent struggles…';
+      const res = await fetch('/api/learning/refresh', { method: 'POST' }).then(r => r.json());
+      document.getElementById('learning-meta').textContent = res.updated
+        ? `Updated ${res.areas} areas from ${res.events} events`
+        : (res.reason || res.error || 'No update');
+      refresh();
+    }
+
+    async function fixServices() {
+      document.getElementById('terminal-result').textContent = 'Reinstalling helper and restarting services…';
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'fix services' }),
+      }).then(r => r.json());
+      document.getElementById('terminal-result').textContent = res.stdout || res.reply || res.error || JSON.stringify(res);
+      setTimeout(refresh, 8000);
+    }
+
+    async function runTerminal() {
+      const command = document.getElementById('terminal-cmd').value.trim();
+      if (!command) return;
+      document.getElementById('terminal-result').textContent = 'Running…';
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: command }),
+      }).then(r => r.json());
+      const out = [];
+      if (res.command) out.push(`$ ${res.command}`);
+      if (res.stdout) out.push(res.stdout);
+      if (res.stderr) out.push(res.stderr);
+      document.getElementById('terminal-result').textContent = out.join('\n\n') || res.reply || res.error || JSON.stringify(res);
+      refresh();
+    }
+
+    async function exportNotion() {
+      const res = await fetch('/api/events/export-notion', { method: 'POST' }).then(r => r.json());
+      alert(res.ok ? `Exported to Notion: ${res.url || res.page_id}` : (res.error || res.reason || 'Not configured or skipped'));
     }
 
     async function testNotify() {
@@ -153,14 +830,22 @@
       const message = document.getElementById('message').value.trim();
       if (!message) return;
       document.getElementById('reply').textContent = 'Thinking…';
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) }).then(r => r.json());
-      document.getElementById('reply').textContent = (res.engine ? `[${res.engine}] ` : '') + (res.reply || res.error || JSON.stringify(res));
+      const body = { message };
+      if (webSessionId) body.session_id = webSessionId;
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+      if (res.session_id) webSessionId = res.session_id;
+      const extra = [];
+      if (res.intent) extra.push(res.intent);
+      if (res.deferred) extra.push('deferred');
+      const tag = res.engine ? `[${res.engine}${extra.length ? '/' + extra.join('/') : ''}] ` : '';
+      let body = tag + (res.reply || res.error || JSON.stringify(res));
+      if (res.stdout && res.engine === 'terminal') body += '\n\n' + res.stdout;
+      document.getElementById('reply').textContent = body;
       document.getElementById('message').value = '';
       refresh();
     };
 
-    refresh();
-    setInterval(refresh, 10000);
+    refresh().then(scheduleRefresh);
   </script>
 </body>
 </html>

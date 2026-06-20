@@ -1,5 +1,5 @@
 from jarvis.config import settings
-from jarvis.services import approvals, macos, people, tasks
+from jarvis.services import approvals, macos, people, security, tasks
 
 
 async def handle_webhook(payload: dict) -> dict:
@@ -37,6 +37,12 @@ async def handle_webhook(payload: dict) -> dict:
             continue
 
         if is_known and not stored:
+            if await security.is_full_access():
+                guest_name = f"Guest {netatmo_id[:6]}"
+                await people.upsert_person(netatmo_id, guest_name, face_url=face_url, is_known=True)
+                await macos.notify("William Agent", f"Stored {guest_name} (full access).")
+                results.append({"person": guest_name, "action": "auto_stored"})
+                continue
             await approvals.request_approval(
                 action="store_person",
                 detail=f"Netatmo recognized person {netatmo_id}. Name them to remember? ({name_hint})",
@@ -49,6 +55,12 @@ async def handle_webhook(payload: dict) -> dict:
             continue
 
         if not is_known:
+            if await security.is_full_access():
+                guest_name = f"Visitor {netatmo_id[:6]}"
+                await people.upsert_person(netatmo_id, guest_name, face_url=face_url, is_known=False)
+                await macos.notify("William Agent", f"Logged {guest_name} at door (full access).")
+                results.append({"person": guest_name, "action": "auto_logged"})
+                continue
             await approvals.request_approval(
                 action="store_person",
                 detail=f"Unknown person at door. Netatmo ID: {netatmo_id}. Face: {face_url}",
