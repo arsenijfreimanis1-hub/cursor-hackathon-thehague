@@ -4,6 +4,17 @@ import { LanguageSwitcher, useT } from "@rekentafel/i18n";
 import { Badge, Button, Card, formatEuro, PageShell } from "@rekentafel/ui-core";
 import { API_BASE } from "../config";
 
+type MenuCategory = {
+  category_id: string;
+  name: string;
+  items: {
+    item_id: string;
+    name: string;
+    description: string | null;
+    price_inc_vat_cents: number;
+  }[];
+};
+
 export function TableLandingPage() {
   const t = useT();
   const { restaurantSlug, tableCode } = useParams({ from: "/t/$restaurantSlug/$tableCode" });
@@ -48,6 +59,7 @@ export function TableLandingPage() {
   const table = data.table as { table_code: string; session_state: string };
   const restaurant = data.restaurant as { name: string };
   const hint = data.payment_session_hint as { payment_session_id: string } | null;
+  const menu = data.menu as { categories: MenuCategory[] };
   const paymentActive = table.session_state === "READY_TO_PAY" && hint;
   const stateLabel = t(`state.${table.session_state}`);
 
@@ -80,20 +92,23 @@ export function TableLandingPage() {
         </p>
       </Card>
 
-      <Card title={t("guest.table.menuTitle")} subtitle={t("guest.table.menuSubtitle")}>
-        <div className="landing-menu-preview">
-          <span>Huisgemaakte soep / Soup</span>
-          <strong>{formatEuro(650)}</strong>
-        </div>
-        <div className="landing-menu-preview">
-          <span>Verse pasta / Pasta</span>
-          <strong>{formatEuro(1450)}</strong>
-        </div>
-        <div className="landing-menu-preview">
-          <span>Tiramisu</span>
-          <strong>{formatEuro(750)}</strong>
-        </div>
-      </Card>
+      {menu.categories.map((category) => (
+        <Card key={category.category_id} title={category.name} subtitle={t("guest.table.menuBrowse")}>
+          {category.items.map((item) => (
+            <div key={item.item_id} className="landing-menu-preview">
+              <div>
+                <span>{item.name}</span>
+                {item.description ? (
+                  <p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "0.8125rem" }}>
+                    {item.description}
+                  </p>
+                ) : null}
+              </div>
+              <strong>{formatEuro(item.price_inc_vat_cents)}</strong>
+            </div>
+          ))}
+        </Card>
+      ))}
     </PageShell>
   );
 }

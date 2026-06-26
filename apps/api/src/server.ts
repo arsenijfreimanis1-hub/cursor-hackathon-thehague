@@ -7,6 +7,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMessageBus } from "./flux/bus.js";
 import { registerHandlers } from "./flux/handlers.js";
+import { loadVenueMenu } from "./flux/menu.js";
+import { prisma } from "@rekentafel/db";
 import { BillEventBus, formatSseMessage } from "@rekentafel/realtime";
 import {
   CombinedCheckoutService,
@@ -70,6 +72,20 @@ app.get<{
   }
   return result;
 });
+
+app.get<{ Params: { restaurant_slug: string } }>(
+  "/v1/restaurants/:restaurant_slug/menu",
+  async (request, reply) => {
+    const restaurant = await prisma.restaurant.findFirst({
+      where: { slug: request.params.restaurant_slug, status: "ACTIVE" },
+      include: { venues: { take: 1 } },
+    });
+    if (!restaurant?.venues[0]) {
+      return reply.status(404).send({ title: "Restaurant not found", status: 404 });
+    }
+    return loadVenueMenu(restaurant.venues[0].id);
+  },
+);
 
 // --- Guest: join payment session ---
 app.post<{

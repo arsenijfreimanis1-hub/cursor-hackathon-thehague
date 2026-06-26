@@ -107,6 +107,96 @@ async function main() {
   });
 
   console.log(`Set DEV_STAFF_ID=${staff.id} in .env for payment activation`);
+
+  await seedMenu(restaurant.id, venue.id);
+}
+
+type MenuSeedItem = {
+  name: string;
+  description: string;
+  priceDisplayCents: number;
+  vatRateBps: number;
+};
+
+type MenuSeedCategory = {
+  name: string;
+  sortOrder: number;
+  items: MenuSeedItem[];
+};
+
+async function seedMenu(restaurantId: string, venueId: string) {
+  const menu: MenuSeedCategory[] = [
+    {
+      name: "Dranken",
+      sortOrder: 0,
+      items: [
+        { name: "Heineken 0,25 L", description: "Pilsener", priceDisplayCents: 450, vatRateBps: 2100 },
+        { name: "Huiswit (glas)", description: "Fris & droog", priceDisplayCents: 550, vatRateBps: 2100 },
+        { name: "Espresso", description: "Dubbel shot", priceDisplayCents: 300, vatRateBps: 900 },
+      ],
+    },
+    {
+      name: "Hoofdgerechten",
+      sortOrder: 1,
+      items: [
+        {
+          name: "Burger van de chef",
+          description: "200 g rund, cheddar, sla, huisdressing",
+          priceDisplayCents: 1850,
+          vatRateBps: 900,
+        },
+        {
+          name: "Pasta carbonara",
+          description: "Guanciale, pecorino, eieren",
+          priceDisplayCents: 1600,
+          vatRateBps: 900,
+        },
+        {
+          name: "Gegrilde zalm",
+          description: "Kappertjes, citroen, seizoensgroenten",
+          priceDisplayCents: 2200,
+          vatRateBps: 900,
+        },
+      ],
+    },
+    {
+      name: "Desserts",
+      sortOrder: 2,
+      items: [
+        { name: "Tiramisu", description: "Huisgemaakt", priceDisplayCents: 750, vatRateBps: 900 },
+        { name: "Crème brûlée", description: "Vanille", priceDisplayCents: 800, vatRateBps: 900 },
+        { name: "Chocolademousse", description: "Pure chocolade", priceDisplayCents: 700, vatRateBps: 900 },
+      ],
+    },
+  ];
+
+  await prisma.menuItem.deleteMany({ where: { category: { venueId } } });
+  await prisma.menuCategory.deleteMany({ where: { venueId } });
+
+  for (const category of menu) {
+    const created = await prisma.menuCategory.create({
+      data: {
+        restaurantId,
+        venueId,
+        name: category.name,
+        sortOrder: category.sortOrder,
+      },
+    });
+    for (const [index, item] of category.items.entries()) {
+      await prisma.menuItem.create({
+        data: {
+          categoryId: created.id,
+          name: item.name,
+          description: item.description,
+          priceDisplayCents: item.priceDisplayCents,
+          vatRateBps: item.vatRateBps,
+          sortOrder: index,
+        },
+      });
+    }
+  }
+
+  console.log("Seeded demo menu: 3 dranken, 3 hoofdgerechten, 3 desserts");
 }
 
 main()

@@ -47,6 +47,7 @@ export const nl = {
       joinBill: "Deelnemen aan rekening",
       menuTitle: "Vandaag op het menu",
       menuSubtitle: "Demo Bistro selectie",
+      menuBrowse: "Vraag uw bediening om te bestellen",
     },
     join: {
       title: "Deelnemen",
@@ -121,6 +122,8 @@ export const nl = {
       qrSubtitle: "Geen app nodig — scan met camera",
       billTitle: "Rekening",
       billSubtitle: "Voeg gerechten toe",
+      menuTitle: "Menu",
+      menuSubtitle: "Tik om aan de rekening toe te voegen",
       dish: "Gerecht",
       dishPlaceholder: "Bijv. Pasta carbonara",
       pricePlaceholder: "€ prijs",
@@ -214,6 +217,7 @@ export const en: Messages = {
       joinBill: "Join the bill",
       menuTitle: "On the menu today",
       menuSubtitle: "Demo Bistro selection",
+      menuBrowse: "Ask your server to order",
     },
     join: {
       title: "Join",
@@ -288,6 +292,8 @@ export const en: Messages = {
       qrSubtitle: "No app needed — scan with camera",
       billTitle: "Bill",
       billSubtitle: "Add dishes",
+      menuTitle: "Menu",
+      menuSubtitle: "Tap to add to the bill",
       dish: "Dish",
       dishPlaceholder: "e.g. Pasta carbonara",
       pricePlaceholder: "€ price",

@@ -21,6 +21,7 @@ import type {
   ListStaffFloorQuery,
 } from "./messages.js";
 import { prisma } from "@rekentafel/db";
+import { loadVenueMenu } from "./menu.js";
 import { computeSettlement, validateAllocationAmount } from "@rekentafel/split-engine";
 import {
   CombinedCheckoutService,
@@ -122,6 +123,7 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
 
     const session = table.currentDiningSession;
     const paymentSession = session?.paymentSessions[0];
+    const menu = await loadVenueMenu(table.venueId);
 
     return {
       table: {
@@ -140,7 +142,7 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
       payment_session_hint: paymentSession
         ? { payment_session_id: paymentSession.id, join_required: true }
         : null,
-      menu: { categories: [] },
+      menu,
     };
   });
 
@@ -200,6 +202,7 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
           table: {
             table_id: table.id,
             restaurant_id: restaurant.id,
+            restaurant_slug: restaurant.slug,
             table_code: table.tableCode,
             seats: table.seats,
             pos_x: table.posX,

@@ -14,6 +14,7 @@ export type StaffTable = {
   table: {
     table_id: string;
     table_code: string;
+    restaurant_slug?: string;
     session_state: string;
     qr_url?: string;
     seats?: number;
@@ -211,6 +212,33 @@ export function useAckSignal(accessToken: string | null, baseUrl = defaultBase) 
       return response.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-signals"] }),
+  });
+}
+
+export type RestaurantMenu = {
+  categories: {
+    category_id: string;
+    name: string;
+    items: {
+      item_id: string;
+      name: string;
+      description: string | null;
+      price_inc_vat_cents: number;
+      vat_rate_bps: number;
+    }[];
+  }[];
+};
+
+export function useRestaurantMenu(restaurantSlug: string, baseUrl = defaultBase) {
+  return useQuery({
+    queryKey: ["restaurant-menu", restaurantSlug, baseUrl],
+    queryFn: async (): Promise<RestaurantMenu> => {
+      const response = await fetch(`${baseUrl}/restaurants/${restaurantSlug}/menu`);
+      if (!response.ok) throw new Error(`Menu fetch failed: ${response.status}`);
+      return response.json();
+    },
+    enabled: Boolean(restaurantSlug),
+    staleTime: 60_000,
   });
 }
 

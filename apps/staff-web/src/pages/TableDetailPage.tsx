@@ -4,6 +4,7 @@ import {
   useAddBillLine,
   useCloseTable,
   useOpenSession,
+  useRestaurantMenu,
   useTableBill,
   useUpdateTableState,
 } from "@rekentafel/staff-hooks";
@@ -39,6 +40,8 @@ export function TableDetailPage({
   const addLine = useAddBillLine(accessToken, API_BASE);
   const activate = useActivatePayment(accessToken, API_BASE);
   const closeTable = useCloseTable(accessToken, API_BASE);
+  const restaurantSlug = table.table.restaurant_slug ?? "demo-bistro";
+  const { data: menuData } = useRestaurantMenu(restaurantSlug, API_BASE);
 
   const [partySize, setPartySize] = useState(table.dining_session?.party_size ?? 4);
   const [name, setName] = useState("");
@@ -150,6 +153,41 @@ export function TableDetailPage({
             <QrDisplay url={table.table.qr_url} label={table.table.table_code} />
           </Card>
         )}
+
+        {canAddLines && menuData?.categories.length ? (
+          <Card title={t("staff.table.menuTitle")} subtitle={t("staff.table.menuSubtitle")}>
+            {menuData.categories.map((category) => (
+              <div key={category.category_id} className="staff-menu-category">
+                <h3 className="staff-menu-category__title">{category.name}</h3>
+                <div className="staff-menu-grid">
+                  {category.items.map((item) => (
+                    <Button
+                      key={item.item_id}
+                      variant="secondary"
+                      size="sm"
+                      className="staff-menu-item"
+                      onClick={() =>
+                        addLine.mutate(
+                          {
+                            tableId,
+                            name: item.name,
+                            qty: 1,
+                            unitPriceIncVatCents: item.price_inc_vat_cents,
+                            vatRateBps: item.vat_rate_bps,
+                          },
+                          { onSuccess: () => refetch() },
+                        )
+                      }
+                    >
+                      <span>{item.name}</span>
+                      <span>{formatEuro(item.price_inc_vat_cents)}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </Card>
+        ) : null}
 
         {canAddLines && (
           <Card title={t("staff.table.billTitle")} subtitle={t("staff.table.billSubtitle")}>
