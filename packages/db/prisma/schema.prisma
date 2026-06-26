@@ -35,9 +35,11 @@ enum StaffRole {
 }
 
 enum DiningSessionState {
-  EMPTY
+  DORMANT
   SEATED
-  PAYMENT_ACTIVE
+  ORDERED
+  READY_TO_PAY
+  PAID
   CLOSED
 }
 
@@ -302,6 +304,8 @@ model Table {
   tableCode               String          @map("table_code") @db.VarChar(16)
   section                 String?         @db.VarChar(64)
   seats                   Int?            @db.SmallInt
+  posX                    Int             @default(0) @map("pos_x")
+  posY                    Int             @default(0) @map("pos_y")
   sortOrder               Int             @default(0) @map("sort_order")
   isActive                Boolean         @default(true) @map("is_active")
   currentDiningSessionId  String?         @map("current_dining_session_id") @db.Uuid

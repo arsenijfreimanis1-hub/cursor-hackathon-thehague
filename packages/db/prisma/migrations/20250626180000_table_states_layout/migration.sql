@@ -1,0 +1,9 @@
+-- Extend DiningSessionState enum and add table floor layout coordinates
+
+ALTER TYPE "DiningSessionState" RENAME VALUE 'EMPTY' TO 'DORMANT';
+ALTER TYPE "DiningSessionState" RENAME VALUE 'PAYMENT_ACTIVE' TO 'READY_TO_PAY';
+ALTER TYPE "DiningSessionState" ADD VALUE IF NOT EXISTS 'ORDERED';
+ALTER TYPE "DiningSessionState" ADD VALUE IF NOT EXISTS 'PAID';
+
+ALTER TABLE "tables" ADD COLUMN IF NOT EXISTS "pos_x" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "tables" ADD COLUMN IF NOT EXISTS "pos_y" INTEGER NOT NULL DEFAULT 0;

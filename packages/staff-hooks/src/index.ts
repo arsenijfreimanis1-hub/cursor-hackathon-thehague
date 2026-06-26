@@ -2,17 +2,32 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const defaultBase = "http://localhost:3000/v1";
 
+export type AllocationLineSummary = {
+  bill_line_id: string;
+  name: string;
+  line_total_inc_vat_cents: number;
+  claimed_by: string;
+  unclaimed_cents: number;
+};
+
 export type StaffTable = {
   table: {
     table_id: string;
     table_code: string;
     session_state: string;
     qr_url?: string;
+    seats?: number;
+    pos_x?: number;
+    pos_y?: number;
   };
-  dining_session?: { dining_session_id: string; state: string };
+  dining_session?: { dining_session_id: string; state: string; party_size?: number };
   payment_session_id?: string;
   join_pin?: string;
   bill_total_cents?: number;
+  bill_line_count?: number;
+  confirmed_paid_cents?: number;
+  allocation_summary?: AllocationLineSummary[];
+  pending_signals?: number;
 };
 
 function authHeaders(token: string | null) {
@@ -21,20 +36,25 @@ function authHeaders(token: string | null) {
 
 export function useStaffTables(accessToken: string | null, baseUrl = defaultBase) {
   return useQuery({
-    queryKey: ["staff-tables", accessToken],
+    queryKey: ["staff-floor", accessToken],
     queryFn: async (): Promise<StaffTable[]> => {
-      const response = await fetch(`${baseUrl}/staff/tables`, {
+      const response = await fetch(`${baseUrl}/staff/floor`, {
         headers: authHeaders(accessToken) as HeadersInit,
       });
-      if (!response.ok) throw new Error(`Failed to load tables: ${response.status}`);
+      if (!response.ok) throw new Error(`Failed to load floor: ${response.status}`);
       return response.json();
     },
     enabled: Boolean(accessToken),
-    refetchInterval: 5000,
+    refetchInterval: 2000,
   });
 }
 
-export function useTableBill(tableId: string | null, accessToken: string | null, baseUrl = defaultBase) {
+export function useTableBill(
+  tableId: string | null,
+  accessToken: string | null,
+  baseUrl = defaultBase,
+  poll = false,
+) {
   return useQuery({
     queryKey: ["table-bill", tableId],
     queryFn: async () => {
@@ -45,6 +65,7 @@ export function useTableBill(tableId: string | null, accessToken: string | null,
       return response.json();
     },
     enabled: Boolean(tableId && accessToken),
+    refetchInterval: poll ? 2000 : false,
   });
 }
 
@@ -60,7 +81,33 @@ export function useOpenSession(accessToken: string | null, baseUrl = defaultBase
       if (!response.ok) throw new Error(`Open session failed: ${response.status}`);
       return response.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-tables"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-floor"] }),
+  });
+}
+
+export function useUpdateTableState(accessToken: string | null, baseUrl = defaultBase) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      tableId: string;
+      state?: string;
+      partySize?: number;
+    }) => {
+      const response = await fetch(`${baseUrl}/staff/tables/${input.tableId}/state`, {
+        method: "PATCH",
+        headers: authHeaders(accessToken) as HeadersInit,
+        body: JSON.stringify({
+          state: input.state,
+          party_size: input.partySize,
+        }),
+      });
+      if (!response.ok) throw new Error(`Update state failed: ${response.status}`);
+      return response.json();
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["staff-floor"] });
+      qc.invalidateQueries({ queryKey: ["table-bill", vars.tableId] });
+    },
   });
 }
 
@@ -89,7 +136,7 @@ export function useAddBillLine(accessToken: string | null, baseUrl = defaultBase
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["table-bill", vars.tableId] });
-      qc.invalidateQueries({ queryKey: ["staff-tables"] });
+      qc.invalidateQueries({ queryKey: ["staff-floor"] });
     },
   });
 }
@@ -114,7 +161,7 @@ export function useActivatePayment(accessToken: string | null, baseUrl = default
         guest_url: string;
       }>;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-tables"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-floor"] }),
   });
 }
 
@@ -133,7 +180,7 @@ export function useCloseTable(accessToken: string | null, baseUrl = defaultBase)
       if (!response.ok) throw new Error(`Close failed: ${response.status}`);
       return response.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-tables"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-floor"] }),
   });
 }
 
@@ -166,3 +213,17 @@ export function useAckSignal(accessToken: string | null, baseUrl = defaultBase) 
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-signals"] }),
   });
 }
+
+export const SESSION_STATE_LABELS: Record<string, string> = {
+  DORMANT: "Dormant",
+  SEATED: "Gezeten",
+  ORDERED: "Besteld",
+  READY_TO_PAY: "Klaar om te betalen",
+  PAID: "Betaald",
+  CLOSED: "Gesloten",
+};
+
+export const SIGNAL_TYPE_LABELS: Record<string, string> = {
+  READY_TO_ORDER: "Klaar om te bestellen",
+  ASSISTANCE: "Hulp nodig",
+};

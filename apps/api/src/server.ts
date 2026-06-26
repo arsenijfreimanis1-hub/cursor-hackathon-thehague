@@ -1,3 +1,4 @@
+import "./env.js";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { randomUUID } from "node:crypto";
@@ -220,6 +221,38 @@ app.post<{
   return reply.status(201).send(result);
 });
 
+// --- Staff: floor (live snapshot) ---
+app.get("/v1/staff/floor", async (request, reply) => {
+  if (!requireStaff(request)) return reply.status(401).send({ title: "Unauthorized", status: 401 });
+  const venueId = process.env.DEV_VENUE_ID;
+  if (!venueId) return reply.status(503).send({ title: "DEV_VENUE_ID not configured", status: 503 });
+  return bus.dispatch({ type: "query.listStaffFloor", venueId }, ctx());
+});
+
+app.get("/v1/staff/floor/stream", async (request, reply) => {
+  if (!requireStaff(request)) return reply.status(401).send({ title: "Unauthorized", status: 401 });
+  const venueId = process.env.DEV_VENUE_ID;
+  if (!venueId) return reply.status(503).send({ title: "DEV_VENUE_ID not configured", status: 503 });
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+
+  const sendSnapshot = async () => {
+    const floor = await bus.dispatch({ type: "query.listStaffFloor", venueId }, ctx());
+    reply.raw.write(`event: floor\ndata: ${JSON.stringify(floor)}\n\n`);
+  };
+
+  await sendSnapshot();
+  const interval = setInterval(() => {
+    sendSnapshot().catch(() => undefined);
+  }, 2000);
+
+  request.raw.on("close", () => clearInterval(interval));
+});
+
 // --- Staff: tables ---
 app.get("/v1/staff/tables", async (request, reply) => {
   if (!requireStaff(request)) return reply.status(401).send({ title: "Unauthorized", status: 401 });
@@ -305,6 +338,63 @@ app.post<{ Params: { table_id: string } }>(
       return reply.status(422).send({ title: String(result.error), status: 422 });
     }
     return reply.status(201).send(result);
+  },
+);
+
+// --- Staff: update table layout ---
+app.patch<{
+  Params: { table_id: string };
+  Body: { pos_x: number; pos_y: number };
+}>(
+  "/v1/staff/tables/:table_id/layout",
+  async (request, reply) => {
+    if (!requireStaff(request)) return reply.status(401).send({ title: "Unauthorized", status: 401 });
+    const venueId = process.env.DEV_VENUE_ID;
+    if (!venueId) return reply.status(503).send({ title: "DEV_VENUE_ID not configured", status: 503 });
+    const result = await bus.dispatch(
+      {
+        type: "command.updateTableLayout",
+        venueId,
+        tableId: request.params.table_id,
+        posX: request.body.pos_x,
+        posY: request.body.pos_y,
+      },
+      ctx(),
+    );
+    if (result && typeof result === "object" && "notFound" in result) {
+      return reply.status(404).send({ title: "Table not found", status: 404 });
+    }
+    return result;
+  },
+);
+
+// --- Staff: update table session state ---
+app.patch<{
+  Params: { table_id: string };
+  Body: { state?: string; party_size?: number };
+}>(
+  "/v1/staff/tables/:table_id/state",
+  async (request, reply) => {
+    if (!requireStaff(request)) return reply.status(401).send({ title: "Unauthorized", status: 401 });
+    const result = await bus.dispatch(
+      {
+        type: "command.updateTableState",
+        tableId: request.params.table_id,
+        state: request.body.state as
+          | "SEATED"
+          | "ORDERED"
+          | "READY_TO_PAY"
+          | "PAID"
+          | "CLOSED"
+          | undefined,
+        partySize: request.body.party_size,
+      },
+      ctx(),
+    );
+    if (result && typeof result === "object" && "error" in result) {
+      return reply.status(422).send({ title: String(result.error), status: 422, ...result });
+    }
+    return result;
   },
 );
 

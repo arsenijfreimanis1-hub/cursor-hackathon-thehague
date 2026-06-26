@@ -4,9 +4,11 @@
  */
 
 export const TableSessionState = {
-  EMPTY: "EMPTY",
+  DORMANT: "DORMANT",
   SEATED: "SEATED",
-  PAYMENT_ACTIVE: "PAYMENT_ACTIVE",
+  ORDERED: "ORDERED",
+  READY_TO_PAY: "READY_TO_PAY",
+  PAID: "PAID",
   CLOSED: "CLOSED",
 } as const;
 export type TableSessionState =

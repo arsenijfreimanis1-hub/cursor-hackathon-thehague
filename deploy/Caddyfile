@@ -1,5 +1,5 @@
-# Local reverse proxy → jarvis-core on host :8787
-# Start: ./scripts/docker-stack.sh start
+# Rekentafel reverse proxy for Mac mini hosting
+# Start: ./scripts/rekentafel-start.sh (services on host) + docker compose --profile proxy up -d
 # Access: http://127.0.0.1:8080
 
 {
@@ -7,5 +7,17 @@
 }
 
 :8080 {
-	reverse_proxy host.docker.internal:8787
+	@api path /v1/*
+	handle @api {
+		reverse_proxy host.docker.internal:3000
+	}
+
+	@staff path /staff /staff/*
+	handle @staff {
+		reverse_proxy host.docker.internal:5174
+	}
+
+	handle {
+		reverse_proxy host.docker.internal:5173
+	}
 }

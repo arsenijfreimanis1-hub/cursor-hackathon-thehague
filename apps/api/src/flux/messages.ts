@@ -86,6 +86,26 @@ export type GetTableBillQuery = {
   tableId: string;
 };
 
+export type ListStaffFloorQuery = {
+  type: "query.listStaffFloor";
+  venueId: string;
+};
+
+export type UpdateTableLayoutCommand = {
+  type: "command.updateTableLayout";
+  venueId: string;
+  tableId: string;
+  posX: number;
+  posY: number;
+};
+
+export type UpdateTableStateCommand = {
+  type: "command.updateTableState";
+  tableId: string;
+  state?: "SEATED" | "ORDERED" | "READY_TO_PAY" | "PAID" | "CLOSED";
+  partySize?: number;
+};
+
 export type InitiateCombinedCheckoutCommand = {
   type: "command.initiateCombinedCheckout";
   paymentSessionId: string;
@@ -113,5 +133,8 @@ export type ApiMessage =
   | ListServiceSignalsQuery
   | AckServiceSignalCommand
   | GetTableBillQuery
+  | ListStaffFloorQuery
+  | UpdateTableLayoutCommand
+  | UpdateTableStateCommand
   | InitiateCombinedCheckoutCommand
   | ReconcileMollieWebhookCommand;

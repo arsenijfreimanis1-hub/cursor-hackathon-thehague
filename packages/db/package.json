@@ -12,11 +12,12 @@
     "lint": "eslint src",
     "db:generate": "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/rekentafel prisma generate",
     "db:validate": "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/rekentafel prisma validate",
-    "db:migrate": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.10.1"
+    "@prisma/client": "^6.10.1",
+    "dotenv": "^16.5.0"
   },
   "devDependencies": {
     "@rekentafel/config": "workspace:*",

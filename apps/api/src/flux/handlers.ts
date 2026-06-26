@@ -16,6 +16,9 @@ import type {
   OpenDiningSessionCommand,
   ReconcileMollieWebhookCommand,
   ResolveTableQrQuery,
+  UpdateTableLayoutCommand,
+  UpdateTableStateCommand,
+  ListStaffFloorQuery,
 } from "./messages.js";
 import { prisma } from "@rekentafel/db";
 import { computeSettlement, validateAllocationAmount } from "@rekentafel/split-engine";
@@ -33,11 +36,52 @@ import {
   publishBillUpdate,
   recalculateBillTotals,
 } from "./bill-utils.js";
-
-const guestWebUrl = process.env.GUEST_WEB_URL ?? "http://localhost:5173";
+import { guestBaseUrl } from "../env.js";
 
 function buildQrUrl(restaurantSlug: string, tableCode: string): string {
-  return `${guestWebUrl}/t/${restaurantSlug}/${tableCode}`;
+  return `${guestBaseUrl()}/t/${restaurantSlug}/${tableCode}`;
+}
+
+async function buildAllocationSummary(billId: string) {
+  const lines = await prisma.billLine.findMany({
+    where: { billId, voidedAt: null },
+    include: {
+      allocatableUnits: {
+        include: {
+          allocations: {
+            where: { state: { in: ["COMMITTED", "LOCKED_FOR_CHECKOUT"] } },
+            include: { participant: true },
+          },
+        },
+      },
+    },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  return lines.map((line) => {
+    const claims = line.allocatableUnits.flatMap((unit) =>
+      unit.allocations.map((a) => ({
+        participant_name: a.participant.displayName,
+        amount_cents: a.allocatedAmountCents,
+      })),
+    );
+    const claimedTotal = claims.reduce((s, c) => s + c.amount_cents, 0);
+    const unclaimed = line.lineTotalIncVatCents - claimedTotal;
+
+    return {
+      bill_line_id: line.id,
+      name: line.name,
+      line_total_inc_vat_cents: line.lineTotalIncVatCents,
+      claimed_by:
+        claims.length === 0
+          ? "Vrij"
+          : unclaimed > 0
+            ? claims.map((c) => c.participant_name).join(", ") + " (+ Vrij)"
+            : claims.map((c) => c.participant_name).join(", "),
+      claims,
+      unclaimed_cents: Math.max(0, unclaimed),
+    };
+  });
 }
 
 export type HandlerDeps = {
@@ -84,7 +128,7 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
         table_id: table.id,
         restaurant_id: restaurant.id,
         table_code: table.tableCode,
-        session_state: session?.state ?? "EMPTY",
+        session_state: session?.state ?? "DORMANT",
         qr_url: table.qrCode?.qrPayloadUrl ?? buildQrUrl(restaurant.slug, table.tableCode),
       },
       restaurant: {
@@ -92,7 +136,7 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
         name: restaurant.tradeName,
         slug: restaurant.slug,
       },
-      session_state: session?.state ?? "EMPTY",
+      session_state: session?.state ?? "DORMANT",
       payment_session_hint: paymentSession
         ? { payment_session_id: paymentSession.id, join_required: true }
         : null,
@@ -101,8 +145,23 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
   });
 
   bus.register<ListStaffTablesQuery, unknown>("query.listStaffTables", async (msg) => {
+    return buildStaffFloor(msg.venueId);
+  });
+
+  bus.register<ListStaffFloorQuery, unknown>("query.listStaffFloor", async (msg) => {
+    return buildStaffFloor(msg.venueId);
+  });
+
+  async function buildStaffFloor(venueId: string) {
+    const signalCounts = await prisma.serviceSignal.groupBy({
+      by: ["tableId"],
+      where: { status: "OPEN", table: { venueId } },
+      _count: { _all: true },
+    });
+    const signalsByTable = new Map(signalCounts.map((s) => [s.tableId, s._count._all]));
+
     const tables = await prisma.table.findMany({
-      where: { venueId: msg.venueId, isActive: true },
+      where: { venueId, isActive: true },
       include: {
         qrCode: true,
         currentDiningSession: {
@@ -112,7 +171,11 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
               take: 1,
               orderBy: { openedAt: "desc" },
             },
-            bills: { take: 1, orderBy: { createdAt: "desc" } },
+            bills: {
+              take: 1,
+              orderBy: { createdAt: "desc" },
+              include: { lines: { where: { voidedAt: null } } },
+            },
           },
         },
         venue: { include: { restaurant: true } },
@@ -120,28 +183,48 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
       orderBy: { sortOrder: "asc" },
     });
 
-    return tables.map((table) => {
-      const restaurant = table.venue.restaurant;
-      const session = table.currentDiningSession;
-      const paymentSession = session?.paymentSessions[0];
-      return {
-        table: {
-          table_id: table.id,
-          restaurant_id: restaurant.id,
-          table_code: table.tableCode,
-          session_state: session?.state ?? "EMPTY",
-          qr_url: table.qrCode?.qrPayloadUrl ?? buildQrUrl(restaurant.slug, table.tableCode),
-        },
-        dining_session: session
-          ? { dining_session_id: session.id, state: session.state }
-          : undefined,
-        payment_session_id: paymentSession?.id,
-        join_pin: paymentSession?.joinPin,
-        bill_total_cents: session?.bills[0]?.billGrandTotalCents ?? 0,
-        pending_signals: 0,
-      };
-    });
-  });
+    return Promise.all(
+      tables.map(async (table) => {
+        const restaurant = table.venue.restaurant;
+        const session = table.currentDiningSession;
+        const paymentSession = session?.paymentSessions[0];
+        const bill = session?.bills[0];
+        const qrUrl = table.qrCode?.qrPayloadUrl ?? buildQrUrl(restaurant.slug, table.tableCode);
+
+        let allocationSummary: Awaited<ReturnType<typeof buildAllocationSummary>> = [];
+        if (bill && session?.state === "READY_TO_PAY") {
+          allocationSummary = await buildAllocationSummary(bill.id);
+        }
+
+        return {
+          table: {
+            table_id: table.id,
+            restaurant_id: restaurant.id,
+            table_code: table.tableCode,
+            seats: table.seats,
+            pos_x: table.posX,
+            pos_y: table.posY,
+            session_state: session?.state ?? "DORMANT",
+            qr_url: qrUrl,
+          },
+          dining_session: session
+            ? {
+                dining_session_id: session.id,
+                state: session.state,
+                party_size: session.partySize,
+              }
+            : undefined,
+          payment_session_id: paymentSession?.id,
+          join_pin: paymentSession?.joinPin,
+          bill_total_cents: bill?.billGrandTotalCents ?? 0,
+          bill_line_count: bill?.lines.length ?? 0,
+          confirmed_paid_cents: bill?.confirmedPaidCents ?? 0,
+          allocation_summary: allocationSummary,
+          pending_signals: signalsByTable.get(table.id) ?? 0,
+        };
+      }),
+    );
+  }
 
   bus.register<OpenDiningSessionCommand, unknown>("command.openDiningSession", async (msg) => {
     const table = await prisma.table.findUnique({
@@ -230,6 +313,13 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
     await recalculateBillTotals(bill.id);
     const updated = await prisma.bill.findUniqueOrThrow({ where: { id: bill.id } });
 
+    if (table.currentDiningSession.state === "SEATED") {
+      await prisma.diningSession.update({
+        where: { id: table.currentDiningSession.id },
+        data: { state: "ORDERED" },
+      });
+    }
+
     return {
       line: formatBillLine(line),
       bill: {
@@ -264,11 +354,18 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
     const bill = table.currentDiningSession.bills[0];
     const paymentSession = table.currentDiningSession.paymentSessions[0];
 
+    let allocationSummary: Awaited<ReturnType<typeof buildAllocationSummary>> = [];
+    if (bill && table.currentDiningSession.state === "READY_TO_PAY") {
+      allocationSummary = await buildAllocationSummary(bill.id);
+    }
+
     return {
       dining_session_id: table.currentDiningSession.id,
       state: table.currentDiningSession.state,
+      party_size: table.currentDiningSession.partySize,
       payment_session_id: paymentSession?.id,
       join_pin: paymentSession?.joinPin,
+      allocation_summary: allocationSummary,
       bill: bill
         ? {
             bill_id: bill.id,
@@ -324,7 +421,7 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
     await prisma.diningSession.update({
       where: { id: table.currentDiningSession.id },
       data: {
-        state: "PAYMENT_ACTIVE",
+        state: "READY_TO_PAY",
         activePaymentSessionId: paymentSession.id,
       },
     });
@@ -338,7 +435,7 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
       payment_session_id: paymentSession.id,
       join_pin: joinPin,
       join_token: tokenRaw,
-      guest_url: `${guestWebUrl}/session/${paymentSession.id}/join`,
+      guest_url: `${guestBaseUrl()}/session/${paymentSession.id}/join`,
     };
   });
 
@@ -732,6 +829,17 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
           },
         });
 
+        if (newPaid >= bill.billGrandTotalCents) {
+          const paymentSession = await prisma.paymentSession.findUniqueOrThrow({
+            where: { id: paymentIntent.paymentSessionId },
+            select: { diningSessionId: true },
+          });
+          await prisma.diningSession.update({
+            where: { id: paymentSession.diningSessionId },
+            data: { state: "PAID" },
+          });
+        }
+
         const settlement = computeSettlement(bill.billGrandTotalCents, newPaid, []);
         deps.billEvents.publish(
           createBillUpdatedEvent(paymentIntent.paymentSessionId, bill.billVersion, settlement),
@@ -741,4 +849,58 @@ export function registerHandlers(bus: MessageBus, deps: HandlerDeps): void {
       return { reconciled };
     },
   );
+
+  bus.register<UpdateTableLayoutCommand, unknown>("command.updateTableLayout", async (msg) => {
+    const table = await prisma.table.findFirst({
+      where: { id: msg.tableId, venueId: msg.venueId },
+    });
+    if (!table) return { notFound: true as const };
+
+    const updated = await prisma.table.update({
+      where: { id: msg.tableId },
+      data: { posX: msg.posX, posY: msg.posY },
+    });
+
+    return {
+      table_id: updated.id,
+      pos_x: updated.posX,
+      pos_y: updated.posY,
+    };
+  });
+
+  bus.register<UpdateTableStateCommand, unknown>("command.updateTableState", async (msg) => {
+    const table = await prisma.table.findUnique({
+      where: { id: msg.tableId },
+      include: { currentDiningSession: true },
+    });
+    if (!table?.currentDiningSession) return { error: "NO_ACTIVE_SESSION" as const };
+
+    const session = table.currentDiningSession;
+    const data: { state?: typeof session.state; partySize?: number } = {};
+
+    if (msg.partySize !== undefined) {
+      data.partySize = msg.partySize;
+    }
+
+    if (msg.state && msg.state !== session.state) {
+      const allowed: Record<string, string[]> = {
+        SEATED: ["ORDERED"],
+        ORDERED: ["SEATED", "READY_TO_PAY"],
+        READY_TO_PAY: ["ORDERED", "PAID"],
+        PAID: ["CLOSED"],
+      };
+      const valid = allowed[session.state]?.includes(msg.state);
+      if (!valid && msg.state !== "CLOSED") {
+        return { error: "INVALID_TRANSITION" as const, from: session.state, to: msg.state };
+      }
+      data.state = msg.state as typeof session.state;
+    }
+
+    const updated = await prisma.diningSession.update({
+      where: { id: session.id },
+      data,
+    });
+
+    return { dining_session_id: updated.id, state: updated.state, party_size: updated.partySize };
+  });
 }

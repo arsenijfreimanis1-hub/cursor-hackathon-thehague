@@ -2,9 +2,21 @@
  * Dev seed: demo restaurant with tables and QR codes.
  * Run: pnpm --filter @rekentafel/db db:seed
  */
+import { config } from "dotenv";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(__dirname, "../../../.env") });
+
 const prisma = new PrismaClient();
+
+function guestBaseUrl(): string {
+  const publicBase = process.env.PUBLIC_BASE_URL?.replace(/\/$/, "");
+  if (publicBase) return publicBase;
+  return process.env.GUEST_WEB_URL?.replace(/\/$/, "") ?? "http://localhost:5173";
+}
 
 async function main() {
   const restaurant = await prisma.restaurant.upsert({
@@ -30,23 +42,31 @@ async function main() {
     },
   });
 
-  const tableCodes = ["T01", "T02", "T03", "T04"];
-  const guestWebUrl = process.env.GUEST_WEB_URL ?? "http://localhost:5173";
+  const tableLayout: { code: string; posX: number; posY: number }[] = [
+    { code: "T01", posX: 25, posY: 25 },
+    { code: "T02", posX: 75, posY: 25 },
+    { code: "T03", posX: 25, posY: 75 },
+    { code: "T04", posX: 75, posY: 75 },
+  ];
 
-  for (const [index, tableCode] of tableCodes.entries()) {
+  const guestWebUrl = guestBaseUrl();
+
+  for (const [index, layout] of tableLayout.entries()) {
     const table = await prisma.table.upsert({
-      where: { venueId_tableCode: { venueId: venue.id, tableCode } },
-      update: {},
+      where: { venueId_tableCode: { venueId: venue.id, tableCode: layout.code } },
+      update: { posX: layout.posX, posY: layout.posY, seats: 4 },
       create: {
         venueId: venue.id,
-        tableCode,
+        tableCode: layout.code,
         seats: 4,
+        posX: layout.posX,
+        posY: layout.posY,
         sortOrder: index,
       },
     });
 
-    const publicSlug = `demo-${tableCode.toLowerCase()}`;
-    const qrPayloadUrl = `${guestWebUrl}/t/${restaurant.slug}/${tableCode}`;
+    const publicSlug = `demo-${layout.code.toLowerCase()}`;
+    const qrPayloadUrl = `${guestWebUrl}/t/${restaurant.slug}/${layout.code}`;
 
     await prisma.tableQrCode.upsert({
       where: { tableId: table.id },
@@ -60,6 +80,7 @@ async function main() {
   }
 
   console.log(`Seeded restaurant ${restaurant.slug}, venue ${venue.id}`);
+  console.log(`QR base URL: ${guestWebUrl}`);
   console.log(`Set DEV_VENUE_ID=${venue.id} in .env for staff API`);
 
   const user = await prisma.user.upsert({
