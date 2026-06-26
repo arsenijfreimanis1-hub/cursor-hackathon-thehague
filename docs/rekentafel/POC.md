@@ -109,7 +109,7 @@ Manual alternative: copy `apps/staff-web/.env.production.example` → `.env.prod
 
 ## Part C — Run the demo
 
-1. **Waiter (iPhone app):** Tap **T01** → **Gezeten** → add bill items (name + price) → **Activeer betaling** → note the **PIN**
+1. **Waiter (iPhone app):** Tap **T01** → **Gezeten** → add bill items (name + price) → **Activeer betaling**
 2. **Guest (any phone):** Scan **T01** QR → enter name → claim items → **Pay**
 3. **Mollie test checkout** opens → choose a test payment method → pay (fake money)
 4. **Waiter app** shows which items are claimed vs **Vrij** (free)
