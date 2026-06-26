@@ -29,9 +29,9 @@ fi
 echo "--- Latest README changelog ---"
 grep -A1 "## Changelog" "$REPO_ROOT/README.md" | tail -5 || true
 
-# Optional: start API if apps/api exists and has package.json
-if [ -f "$REPO_ROOT/apps/api/package.json" ]; then
-  echo "API found at apps/api — run manually: cd apps/api && npm install && npm run dev"
+# Optional: start API if Tarik/api exists
+if [ -f "$REPO_ROOT/Tarik/api/package.json" ]; then
+  echo "API at Tarik/api — run: cd Tarik/api && npm install && npm run dev"
 fi
 
 echo "==> Sync complete. Check README Integration Contracts for new webhook URLs."

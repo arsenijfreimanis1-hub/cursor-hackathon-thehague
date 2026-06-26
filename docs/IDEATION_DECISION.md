@@ -34,10 +34,10 @@ Scored 1–5 per criterion from [IDEAS.md](IDEAS.md). **Higher = better.**
 | Safest 12h ship + Apify/n8n tracks | **Competitor Watchdog** |
 | Crowd favorite / local story | **Multilingual City Assistant** (backup) |
 
-## Decision at kickoff (fill in)
+## Decision at kickoff
 
-**Chosen idea:** _________________  
-**Date/time:** _________________  
-**Votes:** A: ___ B: ___ C: ___ D: ___
+**Chosen idea:** **Competitor Watchdog**  
+**Date:** 2026-06-26 (pre-kickoff lock by AJ)  
+**Rationale:** Apify + n8n + Mobbin activated; ElevenLabs/Fluxzero skipped; safest 12h ship with clear demo.
 
-After choosing, update `docs/ARCHITECTURE.md` data flow and root `README.md` Integration Contracts.
+See [PRODUCT.md](PRODUCT.md) for full spec.
