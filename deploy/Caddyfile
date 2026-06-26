@@ -14,6 +14,7 @@
 
 	@staff path /staff /staff/*
 	handle @staff {
+		uri strip_prefix /staff
 		reverse_proxy host.docker.internal:5174
 	}
 

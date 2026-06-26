@@ -1,49 +1,54 @@
 import { Button, Card } from "@rekentafel/ui-core";
+import { LanguageSwitcher, useT } from "@rekentafel/i18n";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/v1";
 
-const QR_FILES = ["T01.png", "T02.png", "T03.png", "T04.png", "rekentafel-qr-sheet.pdf"] as const;
+const QR_FILES = ["rekentafel-qr-sheet.pdf", "T01.png", "T02.png", "T03.png", "T04.png"] as const;
 
 export function QrDownloadPage({ onBack }: { onBack: () => void }) {
+  const t = useT();
+
   return (
     <main className="staff-layout">
-      <header className="staff-header">
-        <Button variant="secondary" onClick={onBack}>
-          ← Terug
+      <div className="detail-back">
+        <Button variant="ghost" size="sm" onClick={onBack}>
+          {t("staff.table.back")}
         </Button>
-        <h1>QR-codes printen</h1>
+        <LanguageSwitcher />
+      </div>
+
+      <header className="detail-header">
+        <h1>{t("staff.qr.title")}</h1>
+        <p>{t("staff.qr.subtitle")}</p>
       </header>
 
-      <Card title="Download voor print">
-        <p className="muted">
-          Print <strong>rekentafel-qr-sheet.pdf</strong> (A4, 4 tafels) of download losse PNGs.
-          Run eerst <code>./scripts/rekentafel-poc.sh</code> op de Mac mini.
-        </p>
-        <ul className="qr-download-list">
-          {QR_FILES.map((file) => (
-            <li key={file}>
-              <a
-                href={`${API_BASE}/admin/qr-codes/${file}`}
-                download={file}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {file}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <div className="detail-grid">
+        <Card title={t("staff.qr.download")} subtitle={t("staff.qr.downloadHint")}>
+          <ul className="qr-download-list">
+            {QR_FILES.map((file) => (
+              <li key={file}>
+                <a
+                  href={`${API_BASE}/admin/qr-codes/${file}`}
+                  download={file}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {file === "rekentafel-qr-sheet.pdf" ? t("staff.qr.sheet") : file.replace(".png", "")}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Card>
 
-      <Card title="Tafels">
-        <ul className="qr-table-list">
-          <li>T01 — linkerboven</li>
-          <li>T02 — rechterboven</li>
-          <li>T03 — linkeronder</li>
-          <li>T04 — rechtsonder</li>
-        </ul>
-        <p className="muted">Plak elke QR op de juiste tafel voor de demo.</p>
-      </Card>
+        <Card title={t("staff.qr.placement")} flat>
+          <ul className="qr-table-list">
+            <li>{t("staff.qr.t01")}</li>
+            <li>{t("staff.qr.t02")}</li>
+            <li>{t("staff.qr.t03")}</li>
+            <li>{t("staff.qr.t04")}</li>
+          </ul>
+        </Card>
+      </div>
     </main>
   );
 }

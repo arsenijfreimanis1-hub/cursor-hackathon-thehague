@@ -87,6 +87,9 @@ importers:
       '@rekentafel/guest-hooks':
         specifier: workspace:*
         version: link:../../packages/guest-hooks
+      '@rekentafel/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@rekentafel/ui-core':
         specifier: workspace:*
         version: link:../../packages/ui-core
@@ -127,6 +130,9 @@ importers:
 
   apps/staff-web:
     dependencies:
+      '@rekentafel/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@rekentafel/staff-hooks':
         specifier: workspace:*
         version: link:../../packages/staff-hooks
@@ -276,6 +282,21 @@ importers:
       eslint:
         specifier: ^9.29.0
         version: 9.39.4(jiti@2.7.0)
+      react:
+        specifier: ^19.1.0
+        version: 19.2.7
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/i18n:
+    devDependencies:
+      '@rekentafel/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/react':
+        specifier: ^19.1.8
+        version: 19.2.17
       react:
         specifier: ^19.1.0
         version: 19.2.7

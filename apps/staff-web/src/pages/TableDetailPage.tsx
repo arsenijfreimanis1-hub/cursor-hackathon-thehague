@@ -6,10 +6,18 @@ import {
   useOpenSession,
   useTableBill,
   useUpdateTableState,
-  SESSION_STATE_LABELS,
 } from "@rekentafel/staff-hooks";
 import type { StaffTable } from "@rekentafel/staff-hooks";
-import { Button, Card, QrDisplay, formatEuro } from "@rekentafel/ui-core";
+import { LanguageSwitcher, useT } from "@rekentafel/i18n";
+import {
+  Badge,
+  Button,
+  Card,
+  Field,
+  formatEuro,
+  PinDisplay,
+  QrDisplay,
+} from "@rekentafel/ui-core";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/v1";
 
@@ -22,6 +30,7 @@ export function TableDetailPage({
   accessToken: string;
   onBack: () => void;
 }) {
+  const t = useT();
   const tableId = table.table.table_id;
   const sessionState = table.table.session_state;
   const pollBill = sessionState === "READY_TO_PAY";
@@ -59,59 +68,70 @@ export function TableDetailPage({
   const canAddLines = ["SEATED", "ORDERED", "READY_TO_PAY"].includes(currentState);
   const canActivate = currentState === "ORDERED" || currentState === "SEATED";
   const canClose = currentState === "PAID" || currentState === "READY_TO_PAY" || currentState === "ORDERED";
+  const activePin = table.join_pin ?? activation?.join_pin;
+
+  const claimLabel = (claimedBy: string) =>
+    claimedBy === "Vrij" ? t("split.free") : claimedBy;
 
   return (
     <main className="staff-layout">
-      <header className="staff-header">
-        <div>
-          <Button variant="secondary" onClick={onBack}>
-            ← Terug
-          </Button>
-          <h1>Tafel {table.table.table_code}</h1>
-          <p className="muted">
-            Status: {SESSION_STATE_LABELS[currentState] ?? currentState}
-            {table.table.seats ? ` · ${table.table.seats} stoelen` : ""}
-          </p>
-        </div>
+      <div className="detail-back" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Button variant="ghost" size="sm" onClick={onBack}>
+          {t("staff.table.back")}
+        </Button>
+        <LanguageSwitcher />
+      </div>
+
+      <header className="detail-header">
+        <h1>
+          {table.table.table_code}
+        </h1>
+        <p>
+          <Badge
+            variant={currentState === "READY_TO_PAY" ? "warning" : currentState === "PAID" ? "success" : "muted"}
+            dot
+          >
+            {t(`state.${currentState}`)}
+          </Badge>
+          {table.table.seats ? ` · ${table.table.seats} ${t("common.seats")}` : ""}
+        </p>
       </header>
 
       <div className="detail-grid">
-        <Card title="Sessie">
+        <Card title={t("staff.table.partySize")}>
           {currentState === "DORMANT" && (
             <div className="stack">
-              <label>
-                Aantal gasten
+              <Field label={t("staff.table.partySize")}>
                 <input
+                  className="rt-input"
                   type="number"
                   min={1}
                   max={20}
                   value={partySize}
                   onChange={(e) => setPartySize(Number(e.target.value))}
                 />
-              </label>
+              </Field>
               <Button
                 onClick={() => openSession.mutate({ tableId, partySize })}
                 disabled={openSession.isPending}
               >
-                Tafel openen
+                {t("staff.table.guests")}
               </Button>
             </div>
           )}
           {currentState !== "DORMANT" && diningSessionId && (
             <div className="stack">
-              <label>
-                Aantal gasten
+              <Field label={t("staff.table.partySize")}>
                 <input
+                  className="rt-input"
                   type="number"
                   min={1}
                   max={20}
                   value={partySize}
                   onChange={(e) => setPartySize(Number(e.target.value))}
-                  onBlur={() =>
-                    updateState.mutate({ tableId, partySize })
-                  }
+                  onBlur={() => updateState.mutate({ tableId, partySize })}
                 />
-              </label>
+              </Field>
               {canClose && (
                 <Button
                   variant="secondary"
@@ -119,24 +139,21 @@ export function TableDetailPage({
                     closeTable.mutate({ tableId, diningSessionId, reason: "Normal close" })
                   }
                 >
-                  Tafel sluiten
+                  {t("staff.table.close")}
                 </Button>
               )}
             </div>
           )}
         </Card>
 
-        <Card title="QR-code voor gasten">
-          {table.table.qr_url && (
-            <>
-              <QrDisplay url={table.table.qr_url} label={table.table.table_code} />
-              <p className="muted">Gasten scannen — geen app download nodig</p>
-            </>
-          )}
-        </Card>
+        {table.table.qr_url && (
+          <Card title={t("staff.table.qrTitle")} subtitle={t("staff.table.qrSubtitle")}>
+            <QrDisplay url={table.table.qr_url} label={table.table.table_code} />
+          </Card>
+        )}
 
         {canAddLines && (
-          <Card title="Rekening invoeren">
+          <Card title={t("staff.table.billTitle")} subtitle={t("staff.table.billSubtitle")}>
             <form
               className="stack"
               onSubmit={(e) => {
@@ -160,88 +177,97 @@ export function TableDetailPage({
                 );
               }}
             >
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Gerecht"
-                required
-              />
+              <Field label={t("staff.table.dish")}>
+                <input
+                  className="rt-input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t("staff.table.dishPlaceholder")}
+                  required
+                />
+              </Field>
               <div className="row">
                 <input
+                  className="rt-input"
                   type="number"
                   value={qty}
                   onChange={(e) => setQty(Number(e.target.value))}
                   min={1}
-                  style={{ width: 60 }}
+                  style={{ maxWidth: "4rem" }}
+                  aria-label="Qty"
                 />
                 <input
+                  className="rt-input"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  placeholder="Prijs €"
+                  placeholder={t("staff.table.pricePlaceholder")}
                   required
                 />
-                <select value={vat} onChange={(e) => setVat(Number(e.target.value) as 900 | 2100)}>
-                  <option value={900}>9% BTW</option>
-                  <option value={2100}>21% BTW</option>
+                <select
+                  className="rt-input"
+                  value={vat}
+                  onChange={(e) => setVat(Number(e.target.value) as 900 | 2100)}
+                  style={{ maxWidth: "5rem" }}
+                >
+                  <option value={900}>9%</option>
+                  <option value={2100}>21%</option>
                 </select>
               </div>
               <Button type="submit" disabled={addLine.isPending}>
-                Toevoegen
+                {t("staff.table.add")}
               </Button>
             </form>
 
-            {bill && (
+            {bill && bill.lines.length > 0 && (
               <ul className="bill-lines">
                 {bill.lines.map((line, i) => (
                   <li key={i}>
-                    {line.name} — {formatEuro(line.line_total_inc_vat_cents)}
+                    <span>{line.name}</span>
+                    <span>{formatEuro(line.line_total_inc_vat_cents)}</span>
                   </li>
                 ))}
               </ul>
             )}
-            <p>
-              <strong>Totaal: {formatEuro(bill?.bill_grand_total_cents ?? 0)}</strong>
+            <p className="total-line">
+              {t("staff.table.total")} {formatEuro(bill?.bill_grand_total_cents ?? 0)}
             </p>
           </Card>
         )}
 
         {canActivate && (
-          <Card title="Betaling activeren">
-            <p className="muted">Gasten kunnen pas deelnemen na activatie.</p>
+          <Card title={t("staff.table.payTitle")} subtitle={t("staff.table.paySubtitle")}>
             <Button
               disabled={activate.isPending || (bill?.bill_grand_total_cents ?? 0) <= 0}
               onClick={() =>
                 activate.mutate({ tableId }, { onSuccess: (result) => setActivation(result) })
               }
             >
-              Activeer betaling
+              {t("staff.table.activate")}
             </Button>
             {activation && (
               <div className="activation-info">
-                <p>
-                  <strong>Pincode: {activation.join_pin}</strong>
+                <p className="muted" style={{ margin: "0 0 0.5rem" }}>
+                  {t("staff.table.sharePin")}
                 </p>
-                <p className="muted">Deel deze code met gasten</p>
+                <PinDisplay pin={activation.join_pin} />
               </div>
             )}
           </Card>
         )}
 
-        {(currentState === "READY_TO_PAY" || table.join_pin) && (
-          <Card title="Betaling actief">
-            <p>
-              <strong>Pincode: {table.join_pin ?? activation?.join_pin ?? "—"}</strong>
-            </p>
-            <p className="muted">Gasten scannen QR → voeren pincode in</p>
+        {(currentState === "READY_TO_PAY" || activePin) && (
+          <Card title={t("staff.table.liveTitle")} subtitle={t("staff.table.liveSubtitle")}>
+            {activePin && <PinDisplay pin={activePin} />}
             {bill?.confirmed_paid_cents ? (
-              <p>Betaald: {formatEuro(bill.confirmed_paid_cents)}</p>
+              <p style={{ textAlign: "center", marginTop: "1rem" }}>
+                {t("staff.table.paidAmount")} <strong>{formatEuro(bill.confirmed_paid_cents)}</strong>
+              </p>
             ) : null}
           </Card>
         )}
 
         {currentState === "READY_TO_PAY" && allocationSummary && allocationSummary.length > 0 && (
-          <Card title="Live verdeling">
-            <p className="muted">Wie heeft wat geclaimd — ververst elke 2 seconden</p>
+          <Card title={t("staff.table.splitTitle")} subtitle={t("staff.table.splitSubtitle")}>
             <ul className="split-monitor">
               {allocationSummary.map((line) => (
                 <li key={line.name + line.claimed_by} className="split-monitor__row">
@@ -254,7 +280,7 @@ export function TableDetailPage({
                       line.claimed_by === "Vrij" ? "split-monitor__free" : "split-monitor__claimed"
                     }
                   >
-                    {line.claimed_by}
+                    {claimLabel(line.claimed_by)}
                   </span>
                 </li>
               ))}
@@ -263,8 +289,8 @@ export function TableDetailPage({
         )}
 
         {currentState === "PAID" && (
-          <Card title="Volledig betaald">
-            <p>Rekening is voldaan. Sluit de tafel om plaats te maken voor nieuwe gasten.</p>
+          <Card title={t("staff.table.paidTitle")}>
+            <p style={{ margin: 0 }}>{t("staff.table.paidBody")}</p>
           </Card>
         )}
       </div>

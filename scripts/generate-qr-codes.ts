@@ -16,9 +16,13 @@ config({ path: resolve(ROOT, ".env") });
 
 const OUT_DIR = resolve(ROOT, "data/qr-codes");
 const RESTAURANT_SLUG = "demo-bistro";
-const TABLE_CODES = ["T01", "T02", "T03", "T04"] as const;
+const TABLE_CODES = (process.env.TABLE_CODES ?? "T01,T02,T03,T04")
+  .split(",")
+  .map((c) => c.trim()) as readonly string[];
 
 function guestBaseUrl(): string {
+  const lan = process.env.VITE_LAN_HOST?.trim();
+  if (lan) return `http://${lan}:5173`;
   const publicBase = process.env.PUBLIC_BASE_URL?.replace(/\/$/, "");
   if (publicBase) return publicBase;
   return process.env.GUEST_WEB_URL?.replace(/\/$/, "") ?? "http://localhost:5173";
@@ -27,28 +31,98 @@ function guestBaseUrl(): string {
 async function loadUrlsFromDb(): Promise<Map<string, string>> {
   const urls = new Map<string, string>();
   const base = guestBaseUrl();
-  try {
-    const prisma = new PrismaClient();
-    const restaurant = await prisma.restaurant.findUnique({ where: { slug: RESTAURANT_SLUG } });
-    if (restaurant) {
-      const qrCodes = await prisma.tableQrCode.findMany({
-        where: { table: { venue: { restaurantId: restaurant.id } } },
-        include: { table: true },
-      });
-      for (const qr of qrCodes) {
-        urls.set(qr.table.tableCode, qr.qrPayloadUrl);
+  const preferConstructed =
+    Boolean(process.env.VITE_LAN_HOST?.trim()) || Boolean(process.env.PUBLIC_BASE_URL?.trim());
+
+  if (!preferConstructed) {
+    try {
+      const prisma = new PrismaClient();
+      const restaurant = await prisma.restaurant.findUnique({ where: { slug: RESTAURANT_SLUG } });
+      if (restaurant) {
+        const qrCodes = await prisma.tableQrCode.findMany({
+          where: { table: { venue: { restaurantId: restaurant.id } } },
+          include: { table: true },
+        });
+        for (const qr of qrCodes) {
+          urls.set(qr.table.tableCode, qr.qrPayloadUrl);
+        }
       }
+      await prisma.$disconnect();
+    } catch {
+      // Fall back to constructed URLs if DB unavailable
     }
-    await prisma.$disconnect();
-  } catch {
-    // Fall back to constructed URLs if DB unavailable
   }
+
   for (const code of TABLE_CODES) {
-    if (!urls.has(code)) {
+    if (preferConstructed || !urls.has(code)) {
       urls.set(code, `${base}/t/${RESTAURANT_SLUG}/${code}`);
     }
   }
   return urls;
+}
+
+async function writeDemoScreen(pngBuffers: { code: string; url: string; png: Buffer }[]) {
+  const cards = pngBuffers
+    .map(
+      ({ code, url, png }) => `
+    <section class="card">
+      <h2>${code}</h2>
+      <img src="data:image/png;base64,${png.toString("base64")}" alt="QR ${code}" width="280" height="280" />
+      <p class="url">${url}</p>
+      <a class="link" href="${url}">Open in browser →</a>
+    </section>`,
+    )
+    .join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rekentafel — Demo QR</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100dvh;
+      font-family: system-ui, sans-serif;
+      background: #0c0a09; color: #fafaf9;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 1.5rem;
+    }
+    h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+    .sub { color: #a8a29e; margin: 0 0 1.5rem; text-align: center; }
+    .grid {
+      display: grid; gap: 1.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      max-width: 900px; width: 100%;
+    }
+    .card {
+      background: #1c1917; border-radius: 16px;
+      padding: 1.25rem; text-align: center;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .card h2 { margin: 0 0 1rem; font-size: 1.75rem; color: #f59e0b; }
+    .card img { border-radius: 12px; background: #fff; padding: 8px; }
+    .url { font-size: 0.7rem; color: #78716c; word-break: break-all; margin: 0.75rem 0; }
+    .link {
+      display: inline-block; margin-top: 0.5rem;
+      color: #34d399; font-weight: 600; text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rekentafel Demo QR</h1>
+  <p class="sub">Wi‑Fi: Titaan Members · Scan with camera or tap link</p>
+  <div class="grid">${cards}</div>
+</body>
+</html>`;
+
+  const screenPath = resolve(OUT_DIR, "demo-screen.html");
+  await writeFile(screenPath, html);
+  const publicPath = resolve(ROOT, "apps/guest-web/public/qr-demo.html");
+  await mkdir(resolve(publicPath, ".."), { recursive: true });
+  await writeFile(publicPath, html);
+  console.log(`  demo-screen.html + guest-web /qr-demo.html`);
 }
 
 async function main() {
@@ -71,7 +145,14 @@ async function main() {
     console.log(`  ${code}.png → ${url}`);
   }
 
-  // A4 PDF — 2×2 grid
+  await writeDemoScreen(pngBuffers);
+
+  if (TABLE_CODES.length < 4) {
+    console.log(`\nQR files saved to: ${OUT_DIR}`);
+    return;
+  }
+
+  // A4 PDF — 2×2 grid (print sheet, all 4 tables)
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);

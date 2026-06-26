@@ -1,6 +1,7 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { I18nProvider } from "@rekentafel/i18n";
 import "@rekentafel/ui-core/styles.css";
 import "./app.css";
 import { LoginShell } from "./pages/LoginShell";
@@ -60,8 +61,10 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <I18nProvider>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </I18nProvider>
   </StrictMode>,
 );

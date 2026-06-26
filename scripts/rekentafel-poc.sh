@@ -117,6 +117,8 @@ echo ""
 echo "  Waiter iPhone app (on your MacBook):"
 echo "    See docs/rekentafel/POC.md — build apps/waiter-mobile in Xcode"
 echo ""
+./scripts/print-network-urls.sh
+echo ""
 echo "  Press Ctrl+C to stop all dev servers."
 echo "=============================================="
 echo ""

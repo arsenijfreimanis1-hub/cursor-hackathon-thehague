@@ -1,19 +1,18 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { createRootRoute, createRoute, Outlet } from "@tanstack/react-router";
+import { WelcomePage } from "./pages/WelcomePage";
 import { TableLandingPage } from "./pages/TableLandingPage";
 import { BillShellPage } from "./pages/BillShellPage";
 import { JoinPage } from "./pages/JoinPage";
 import { CheckoutReturnPage } from "./pages/CheckoutReturnPage";
 
-const rootRoute = createRootRoute();
+const rootRoute = createRootRoute({
+  component: () => <Outlet />,
+});
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: () => (
-    <main className="main">
-      <p>Scan de QR-code op uw tafel om te beginnen.</p>
-    </main>
-  ),
+  component: WelcomePage,
 });
 
 const tableRoute = createRoute({
@@ -50,4 +49,3 @@ export const routeTree = rootRoute.addChildren([
   joinRoute,
   checkoutReturnRoute,
 ]);
-export const router = createRouter({ routeTree });
