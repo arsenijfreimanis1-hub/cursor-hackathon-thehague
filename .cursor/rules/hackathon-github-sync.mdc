@@ -1,0 +1,29 @@
+---
+description: Hackathon team GitHub sync — every agent must follow this
+alwaysApply: true
+---
+
+# Hackathon GitHub sync protocol
+
+You are on a 4-person hackathon team. The README.md is the team bus — other Cursor instances read it to coordinate.
+
+## After every meaningful change
+
+1. `git pull --rebase origin main` (resolve conflicts in README Changelog first)
+2. Update `README.md`:
+   - Add a row to **Changelog** (newest first): time, your dev id, branch, summary, what others need
+   - Update **Integration Contracts** if you changed any API, webhook, or env var
+   - Add **Requests / Blockers** if you are waiting on another dev
+3. Commit with a clear message: `[dev-X] short description`
+4. `git push origin <your-branch>` then merge to main or open PR — prefer fast merges during hackathon
+5. Never commit `.env`, `.env.local`, or API keys
+
+## Your scope
+
+Only edit files in your personal folder (`AJ/`, `Justin/`, `Tarik/`, `Leo/`) by default — but anyone may work anywhere on shared code. Document cross-cutting changes in README first.
+
+Everyone has the same developer role. Product: Competitor Watchdog. Each dev uses their own API keys in `.env.local`.
+
+## Mac mini
+
+The integration hub reads README + repo. If you add a new webhook URL, env var, or port, document it in README **Integration Contracts** immediately.

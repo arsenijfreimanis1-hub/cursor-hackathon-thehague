@@ -1,70 +1,146 @@
-# William Agent (JarvisCore)
+# Cursor Hackathon The Hague — Team Hub
 
-Local-first Alexa-like personal agent for Willy's Mac mini — voice, memory, hybrid AI, and background work.
+> **This README is the live coordination channel between all Cursor instances.**
+> Every teammate must read this before starting work and update it after every push.
+
+**Event:** Cursor Hackathon, The Hague — June 26, 2026  
+**Team:** AJ · Justin · Tarik · Leo — **equal developers**, one product  
+**Product:** **Competitor Watchdog** — [docs/PRODUCT.md](docs/PRODUCT.md)  
+**Cursor prompt (same for everyone):** [CURSOR_PROMPT.md](CURSOR_PROMPT.md)  
+**Pack:** #054
+
+---
+
+## Rekentafel MVP (Mac mini demo)
+
+Bill-splitting restaurant demo built on this repo — **guest QR web + waiter app + Mollie test payments**.
+
+| App | Port | URL (LAN) |
+|-----|------|-----------|
+| Guest web | 5173 | `http://<VITE_LAN_HOST>:5173` |
+| Staff / waiter | 5174 | `http://<VITE_LAN_HOST>:5174` |
+| API | 3000 | `http://<VITE_LAN_HOST>:3000/v1` |
+
+**Start on Mac mini:** `./scripts/rekentafel-poc.sh`  
+**Cheat sheet:** [docs/rekentafel/POC.md](docs/rekentafel/POC.md)  
+**On-screen QR codes:** `http://<VITE_LAN_HOST>:5173/qr-demo.html`  
+**Waiter iOS (MacBook + Xcode):** build `apps/waiter-mobile` — see POC.md
+
+```bash
+cp .env.example .env          # add MOLLIE_API_KEY (test_), VITE_LAN_HOST
+pnpm install
+./scripts/rekentafel-poc.sh
+```
+
+---
+
+## How we communicate
+
+1. **Before you code:** `git pull origin main`
+2. **After every meaningful change:** commit, push, update **Changelog** below
+3. **Blockers:** add to **Requests / Blockers**
+4. **API changes:** update **Integration Contracts** immediately
+5. **Mac mini:** whoever is on it runs `mac-mini/sync-from-github.sh` after pushes
+
+---
+
+## Changelog (newest first)
+
+| Time (CET) | Who | Summary | Needs |
+|------------|-----|---------|-------|
+| 2026-06-26 15:30 | Willy | Merged Rekentafel MVP monorepo (guest/staff web, API, waiter Capacitor, QR demo, i18n) | MacBook: clone + `pnpm install` + see Rekentafel section |
+| 2026-06-26 12:30 | AJ | Unified `CURSOR_PROMPT.md` for all devs (no role split); Mobbin MCP added; equal developer model | Everyone: paste `CURSOR_PROMPT.md`, use own keys in `.env.local` |
+| 2026-06-26 12:00 | AJ | Member folders, Competitor Watchdog, integration API | — |
+
+---
+
+## Requests / Blockers
+
+| From | To | Status | Message |
+|------|-----|--------|---------|
+| AJ | All | OPEN | Pull latest, paste **`CURSOR_PROMPT.md`** into Cursor, add **your own** keys to `.env.local` |
+
+---
+
+## Team folders (organization only — no fixed roles)
+
+| Folder | Use for |
+|--------|---------|
+| `AJ/` | AJ's notes and work |
+| `Justin/` | Justin's notes and work |
+| `Tarik/` | Tarik's notes and work |
+| `Leo/` | Leo's notes and work |
+
+Shared code: `Tarik/api/`, `Justin/web/`, `Leo/workflows/`, `mac-mini/`, **`apps/`** (Rekentafel). Anyone can edit anywhere — update README when you do.
+
+---
+
+## Integration Contracts
+
+### API base URL
+- Rekentafel dev: `http://localhost:3000/v1`
+- Watchdog dev: `http://localhost:4000`
+- Tunnel: `PUBLIC_WEBHOOK_URL` / `PUBLIC_BASE_URL` in `.env` (Mac mini)
+
+### Endpoints (shared API in `Tarik/api/`)
+
+| Endpoint | Method | Body | Response |
+|----------|--------|------|----------|
+| `/health` | GET | — | `{ status, service, ts }` |
+| `/integrations/status` | GET | — | Apify + n8n connection status |
+| `/competitors` | GET | — | `{ competitors: [...] }` |
+| `/competitors` | POST | `{ name, url, niche? }` | competitor object |
+| `/competitors/:id/snapshots` | GET/POST | `{ prices[], reviews[] }` | snapshot |
+| `/alerts` | GET | — | `{ alerts: [...] }` |
+| `/webhooks/n8n` | POST | see Leo's workflow | `{ received: true }` |
+
+### n8n → API webhook payload (Leo)
+```json
+{
+  "event": "price_change",
+  "competitorId": "comp_1",
+  "field": "price",
+  "oldValue": "€10",
+  "newValue": "€12"
+}
+```
+
+---
+
+## Partner perks
+
+| Partner | Status |
+|---------|--------|
+| Cursor Pro | ✅ Activated |
+| Apify | ✅ Activated |
+| Mobbin | ✅ Activated |
+| n8n Cloud Pro | ✅ Activated |
+| ElevenLabs | ⬜ Not yet — optional stretch |
+| Fluxzero | ⬜ Not using |
+| WhatsApp | https://chat.whatsapp.com/Hpmqgv7CzwIAtXbJ7f1Eo0 |
+
+Verify: `./scripts/connect-services.sh` · Tracker: [docs/PERK_STATUS.md](docs/PERK_STATUS.md)
+
+---
 
 ## Quick start
 
 ```bash
-chmod +x scripts/install.sh
-./scripts/install.sh
+git clone git@github.com:arsenijfreimanis1-hub/cursor-hackathon-thehague.git
+cd cursor-hackathon-thehague
+cp .env.example .env
+pnpm install
+git pull origin main
 ```
 
-Open **http://127.0.0.1:8787** for the control panel.
+Open Cursor → paste **`CURSOR_PROMPT.md`** → enable Hooks in settings.
 
-## What William does
+---
 
-- **Voice** — wake word ("Hey Willy"), 90s conversation mode, TTS replies via macOS helper (:8788)
-- **Hybrid brain** — local Ollama for fast chat, web research for facts, Cursor cloud for hard reasoning/code
-- **Long-term memory** — remember/recall across sessions, auto-compress idle conversations
-- **Background jobs** — queue research while you keep talking; proactive "Done, boss" when finished
-- **Self-learning** — failure lessons injected into every prompt; periodic learning report
-- **Mac control** — apps, Spotify/YouTube, terminal maintenance, screenshots + vision
-- **Approvals** — sensitive actions, desktop input, self-modify merges
-
-## Manual run (dev)
+## Mac mini (AJ)
 
 ```bash
-source .venv/bin/activate
-uvicorn jarvis.main:app --host 127.0.0.1 --port 8787 --reload
+cd mac-mini && ./setup.sh && ./sync-from-github.sh
+./start-tunnel.sh   # copy URL → README + .env
+./scripts/rekentafel-poc.sh   # Rekentafel demo stack
 ```
-
-## Service control
-
-```bash
-launchctl kickstart -k gui/$(id -u)/com.willy.jarvis-core   # restart
-launchctl bootout gui/$(id -u)/com.willy.jarvis-core        # stop
-```
-
-## Routing
-
-| Intent | Engine | Behavior |
-|--------|--------|----------|
-| chat | Ollama + memory | Fast voice replies with session + long-term context |
-| fact / reason | Web research → Ollama / Cursor | Search-first; fail closed if unverified |
-| code | Cursor SDK | Complex builds, refactors, multi-file work |
-| action | Orchestrator + worker | Deferred background tasks with proactive speak |
-| remember / recall | Memory store / FTS | "Remember that…" and "do you recall…" |
-| system | macOS control | Apps, music, windows |
-| terminal | Shell | Maintenance commands (with full-access gate) |
-
-## Integrations
-
-| Integration | Setup |
-|---|---|
-| WhatsApp | `./scripts/install-openclaw-bridge.sh` |
-| Cursor SDK | Copy `.env.example` → `.env`, add `CURSOR_API_KEY` from [dashboard](https://cursor.com/dashboard/integrations) |
-| Netatmo | `./scripts/setup-netatmo-tunnel.sh` |
-| Voice wake word | External mic required — Mac mini has no built-in microphone |
-| Vision model | `ollama pull moondream` |
-
-## API highlights
-
-- `POST /api/chat` — main brain (supports `session_id` for voice follow-ups)
-- `GET /api/memory` — long-term memory entries
-- `POST /api/memory/compress` — summarize idle sessions into memory
-- `GET /api/learning/report` — self-learning report
-- `GET /api/sessions/active` — current conversation state
-
-## Skills
-
-Operational skills live in `jarvis/skills/*.md` and are injected into every prompt automatically.
