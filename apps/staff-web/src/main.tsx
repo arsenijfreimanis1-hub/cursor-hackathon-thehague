@@ -6,15 +6,19 @@ import "./app.css";
 import { LoginShell } from "./pages/LoginShell";
 import { FloorGrid } from "./pages/FloorGrid";
 import { TableDetailPage } from "./pages/TableDetailPage";
+import { QrDownloadPage } from "./pages/QrDownloadPage";
 import type { StaffTable } from "@rekentafel/staff-hooks";
 
 const queryClient = new QueryClient();
+
+type View = "floor" | "table" | "qr";
 
 function App() {
   const [token, setToken] = useState<string | null>(
     () => localStorage.getItem("staff_token"),
   );
   const [selectedTable, setSelectedTable] = useState<StaffTable | null>(null);
+  const [view, setView] = useState<View>("floor");
 
   if (!token) {
     return (
@@ -25,6 +29,10 @@ function App() {
         }}
       />
     );
+  }
+
+  if (view === "qr") {
+    return <QrDownloadPage onBack={() => setView("floor")} />;
   }
 
   if (selectedTable) {
@@ -41,6 +49,7 @@ function App() {
     <FloorGrid
       accessToken={token}
       onSelectTable={setSelectedTable}
+      onOpenQr={() => setView("qr")}
       onLogout={() => {
         localStorage.removeItem("staff_token");
         setToken(null);

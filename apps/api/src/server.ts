@@ -2,6 +2,9 @@ import "./env.js";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createMessageBus } from "./flux/bus.js";
 import { registerHandlers } from "./flux/handlers.js";
 import { BillEventBus, formatSseMessage } from "@rekentafel/realtime";
@@ -13,6 +16,8 @@ import {
 
 const PORT = Number(process.env.API_PORT ?? 3000);
 const billEvents = new BillEventBus();
+const QR_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../data/qr-codes");
+const QR_FILES = new Set(["T01.png", "T02.png", "T03.png", "T04.png", "rekentafel-qr-sheet.pdf"]);
 
 const mollieApiKey = process.env.MOLLIE_API_KEY;
 const mollie =
@@ -431,6 +436,37 @@ app.post<{ Params: { signal_id: string } }>(
     return bus.dispatch({ type: "command.ackServiceSignal", signalId: request.params.signal_id }, ctx());
   },
 );
+
+// --- Admin: printable QR codes ---
+app.get("/v1/admin/qr-codes", async (request, reply) => {
+  if (!requireStaff(request)) return reply.status(401).send({ title: "Unauthorized", status: 401 });
+  return {
+    files: [...QR_FILES],
+    download_base: "/v1/admin/qr-codes",
+    hint: "Run pnpm generate:qr or ./scripts/rekentafel-poc.sh on the server first.",
+  };
+});
+
+app.get<{ Params: { file: string } }>("/v1/admin/qr-codes/:file", async (request, reply) => {
+  const file = request.params.file;
+  if (!QR_FILES.has(file)) {
+    return reply.status(404).send({ title: "File not found", status: 404 });
+  }
+  try {
+    const buf = await readFile(resolve(QR_DIR, file));
+    const type = file.endsWith(".pdf") ? "application/pdf" : "image/png";
+    return reply
+      .header("Content-Type", type)
+      .header("Content-Disposition", `attachment; filename="${file}"`)
+      .send(buf);
+  } catch {
+    return reply.status(404).send({
+      title: "QR file not generated yet",
+      status: 404,
+      detail: "Run ./scripts/rekentafel-poc.sh or pnpm generate:qr on the Mac mini.",
+    });
+  }
+});
 
 // --- Mollie webhook ---
 app.post("/v1/webhooks/mollie", async (request, reply) => {

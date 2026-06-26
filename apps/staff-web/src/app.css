@@ -221,3 +221,30 @@ select {
     padding-top: env(safe-area-inset-top);
   }
 }
+
+.staff-header__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.qr-download-list,
+.qr-table-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0;
+}
+
+.qr-download-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rt-border);
+}
+
+.qr-download-list a {
+  color: var(--rt-accent, #60a5fa);
+  font-weight: 500;
+}
+
+.qr-table-list li {
+  padding: 0.35rem 0;
+}

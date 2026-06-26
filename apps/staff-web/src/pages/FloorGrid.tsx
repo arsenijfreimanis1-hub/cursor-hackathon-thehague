@@ -16,10 +16,12 @@ const stateColors: Record<string, string> = {
 export function FloorGrid({
   accessToken,
   onSelectTable,
+  onOpenQr,
   onLogout,
 }: {
   accessToken: string;
   onSelectTable: (table: StaffTable) => void;
+  onOpenQr: () => void;
   onLogout: () => void;
 }) {
   const { data: tables, isLoading, error } = useStaffTables(accessToken, API_BASE);
@@ -37,9 +39,14 @@ export function FloorGrid({
           <h1>Vloerplan</h1>
           <p className="muted">Tik op een tafel voor details</p>
         </div>
-        <Button variant="secondary" onClick={onLogout}>
-          Uitloggen
-        </Button>
+        <div className="staff-header__actions">
+          <Button variant="secondary" onClick={onOpenQr}>
+            QR printen
+          </Button>
+          <Button variant="secondary" onClick={onLogout}>
+            Uitloggen
+          </Button>
+        </div>
       </header>
 
       {openSignals?.length ? (
