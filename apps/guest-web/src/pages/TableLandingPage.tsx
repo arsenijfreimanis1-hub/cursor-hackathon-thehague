@@ -2,8 +2,7 @@ import { useParams } from "@tanstack/react-router";
 import { useTableLanding } from "@rekentafel/guest-hooks";
 import { LanguageSwitcher, useT } from "@rekentafel/i18n";
 import { Badge, Button, Card, formatEuro, PageShell } from "@rekentafel/ui-core";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/v1";
+import { API_BASE } from "../config";
 
 export function TableLandingPage() {
   const t = useT();
@@ -25,7 +24,10 @@ export function TableLandingPage() {
   if (error || !data) {
     return (
       <PageShell title={t("guest.table.notFound")} headerExtra={<LanguageSwitcher />}>
-        <Card><p>{t("guest.table.notFoundBody")}</p></Card>
+        <Card>
+          <p>{t("guest.table.notFoundBody")}</p>
+          <code className="rt-network-banner__url">{API_BASE}/t/{restaurantSlug}/{tableCode}</code>
+        </Card>
       </PageShell>
     );
   }

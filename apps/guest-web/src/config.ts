@@ -1,5 +1,6 @@
-/** API base — LAN devices use the same host as the web app; iOS builds use prepare-waiter-ios.sh. */
-function resolveApiBase(): string {
+/** Resolve API base — LAN phones use the same host as the guest web app. */
+export function resolveApiBase(override?: string): string {
+  if (override) return override;
   const fromEnv = import.meta.env.VITE_API_BASE_URL;
   if (fromEnv) return fromEnv.replace(/\/$/, "");
 

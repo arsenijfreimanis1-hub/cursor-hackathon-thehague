@@ -21,7 +21,7 @@ import {
 } from "@rekentafel/ui-core";
 import { useQueryClient } from "@tanstack/react-query";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/v1";
+import { API_BASE } from "../config";
 
 type BillLine = {
   line_id: string;

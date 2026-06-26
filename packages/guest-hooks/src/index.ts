@@ -3,25 +3,49 @@ import { useEffect, useRef, useState } from "react";
 
 const defaultBase = "http://localhost:3000/v1";
 
+function resolveBase(baseUrl?: string): string {
+  if (baseUrl) return baseUrl;
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      return `http://${host}:3000/v1`;
+    }
+  }
+  return defaultBase;
+}
+
+async function apiFetch(url: string, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export type UseTableLandingOptions = {
   restaurantSlug: string;
   tableCode: string;
   baseUrl?: string;
 };
 
-export function useTableLanding({ restaurantSlug, tableCode, baseUrl = defaultBase }: UseTableLandingOptions) {
+export function useTableLanding({ restaurantSlug, tableCode, baseUrl }: UseTableLandingOptions) {
+  const base = resolveBase(baseUrl);
   return useQuery({
-    queryKey: ["table-landing", restaurantSlug, tableCode],
+    queryKey: ["table-landing", restaurantSlug, tableCode, base],
     queryFn: async () => {
-      const response = await fetch(`${baseUrl}/t/${restaurantSlug}/${tableCode}`);
+      const response = await apiFetch(`${base}/t/${restaurantSlug}/${tableCode}`);
       if (!response.ok) throw new Error(`Table lookup failed: ${response.status}`);
       return response.json();
     },
     enabled: Boolean(restaurantSlug && tableCode),
+    retry: 1,
   });
 }
 
-export function useJoinSession(baseUrl = defaultBase) {
+export function useJoinSession(baseUrl?: string) {
+  const base = resolveBase(baseUrl);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
@@ -30,7 +54,7 @@ export function useJoinSession(baseUrl = defaultBase) {
       join_token?: string;
       display_name: string;
     }) => {
-      const response = await fetch(`${baseUrl}/payment-sessions/join`, {
+      const response = await apiFetch(`${base}/payment-sessions/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -53,12 +77,13 @@ export function getParticipantId(paymentSessionId: string): string | null {
   return localStorage.getItem(`participant_${paymentSessionId}`);
 }
 
-export function usePaymentSession(paymentSessionId: string, baseUrl = defaultBase) {
+export function usePaymentSession(paymentSessionId: string, baseUrl?: string) {
+  const base = resolveBase(baseUrl);
   const participantId = getParticipantId(paymentSessionId);
   return useQuery({
-    queryKey: ["payment-session", paymentSessionId],
+    queryKey: ["payment-session", paymentSessionId, base],
     queryFn: async () => {
-      const response = await fetch(`${baseUrl}/payment-sessions/${paymentSessionId}`, {
+      const response = await apiFetch(`${base}/payment-sessions/${paymentSessionId}`, {
         headers: participantId ? { "X-Participant-Id": participantId } : {},
       });
       if (!response.ok) throw new Error(`Session fetch failed: ${response.status}`);
@@ -72,14 +97,15 @@ export function usePaymentSession(paymentSessionId: string, baseUrl = defaultBas
 export function useBillEvents(
   paymentSessionId: string,
   onEvent: (event: { type: string; payload: Record<string, unknown> }) => void,
-  baseUrl = defaultBase,
+  baseUrl?: string,
 ) {
+  const base = resolveBase(baseUrl);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
   useEffect(() => {
     if (!paymentSessionId) return;
-    const source = new EventSource(`${baseUrl}/payment-sessions/${paymentSessionId}/events`);
+    const source = new EventSource(`${base}/payment-sessions/${paymentSessionId}/events`);
 
     const handler = (e: MessageEvent) => {
       try {
@@ -95,10 +121,11 @@ export function useBillEvents(
     source.addEventListener("message", handler);
 
     return () => source.close();
-  }, [paymentSessionId, baseUrl]);
+  }, [paymentSessionId, base]);
 }
 
-export function useClaimItem(baseUrl = defaultBase) {
+export function useClaimItem(baseUrl?: string) {
+  const base = resolveBase(baseUrl);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
@@ -110,8 +137,8 @@ export function useClaimItem(baseUrl = defaultBase) {
       const participantId = getParticipantId(input.paymentSessionId);
       if (!participantId) throw new Error("Not joined");
 
-      const response = await fetch(
-        `${baseUrl}/payment-sessions/${input.paymentSessionId}/claims`,
+      const response = await apiFetch(
+        `${base}/payment-sessions/${input.paymentSessionId}/claims`,
         {
           method: "POST",
           headers: {
@@ -134,7 +161,8 @@ export function useClaimItem(baseUrl = defaultBase) {
   });
 }
 
-export function useCombinedCheckout(baseUrl = defaultBase) {
+export function useCombinedCheckout(baseUrl?: string) {
+  const base = resolveBase(baseUrl);
   return useMutation({
     mutationFn: async (input: {
       paymentSessionId: string;
@@ -144,8 +172,8 @@ export function useCombinedCheckout(baseUrl = defaultBase) {
       const participantId = getParticipantId(input.paymentSessionId);
       if (!participantId) throw new Error("Not joined");
 
-      const response = await fetch(
-        `${baseUrl}/payment-sessions/${input.paymentSessionId}/checkout`,
+      const response = await apiFetch(
+        `${base}/payment-sessions/${input.paymentSessionId}/checkout`,
         {
           method: "POST",
           headers: {
@@ -172,10 +200,11 @@ export function useCombinedCheckout(baseUrl = defaultBase) {
   });
 }
 
-export function useCallServer(baseUrl = defaultBase) {
+export function useCallServer(baseUrl?: string) {
+  const base = resolveBase(baseUrl);
   return useMutation({
     mutationFn: async (input: { tableId: string }) => {
-      const response = await fetch(`${baseUrl}/tables/${input.tableId}/service-signals`, {
+      const response = await apiFetch(`${base}/tables/${input.tableId}/service-signals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ signal_type: "ASSISTANCE" }),

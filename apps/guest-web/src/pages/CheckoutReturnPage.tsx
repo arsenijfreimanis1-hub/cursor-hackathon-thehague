@@ -3,7 +3,7 @@ import { LanguageSwitcher, useT } from "@rekentafel/i18n";
 import { Button, Card, MoneyHero, PageShell } from "@rekentafel/ui-core";
 import { usePaymentSession } from "@rekentafel/guest-hooks";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/v1";
+import { API_BASE } from "../config";
 
 export function CheckoutReturnPage() {
   const t = useT();
