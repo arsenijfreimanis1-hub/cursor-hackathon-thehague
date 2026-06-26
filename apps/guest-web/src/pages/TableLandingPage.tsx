@@ -1,5 +1,5 @@
 import { useParams } from "@tanstack/react-router";
-import { useTableLanding } from "@rekentafel/guest-hooks";
+import { useTableLanding, TableLookupError } from "@rekentafel/guest-hooks";
 import { LanguageSwitcher, useT } from "@rekentafel/i18n";
 import { Badge, Button, Card, formatEuro, PageShell } from "@rekentafel/ui-core";
 import { API_BASE } from "../config";
@@ -22,11 +22,24 @@ export function TableLandingPage() {
   }
 
   if (error || !data) {
+    const unreachable =
+      error instanceof TableLookupError ? error.code === "UNREACHABLE" : true;
     return (
-      <PageShell title={t("guest.table.notFound")} headerExtra={<LanguageSwitcher />}>
+      <PageShell
+        title={unreachable ? t("guest.table.apiDown") : t("guest.table.notFound")}
+        headerExtra={<LanguageSwitcher />}
+      >
         <Card>
-          <p>{t("guest.table.notFoundBody")}</p>
+          <p>{unreachable ? t("guest.table.apiDownBody") : t("guest.table.notFoundBody")}</p>
           <code className="rt-network-banner__url">{API_BASE}/t/{restaurantSlug}/{tableCode}</code>
+          {unreachable ? (
+            <p className="muted" style={{ marginTop: "0.75rem", fontSize: "0.8125rem" }}>
+              {t("guest.table.apiDownHint")}
+            </p>
+          ) : null}
+          <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+            {t("common.retry")}
+          </Button>
         </Card>
       </PageShell>
     );

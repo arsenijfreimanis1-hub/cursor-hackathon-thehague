@@ -19,8 +19,23 @@ async function apiFetch(url: string, init?: RequestInit) {
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    throw new TableLookupError(
+      "UNREACHABLE",
+      err instanceof Error ? err.message : "Network error",
+    );
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export class TableLookupError extends Error {
+  readonly code: "NOT_FOUND" | "UNREACHABLE" | "HTTP";
+
+  constructor(code: "NOT_FOUND" | "UNREACHABLE" | "HTTP", message: string) {
+    super(message);
+    this.name = "TableLookupError";
+    this.code = code;
   }
 }
 
@@ -36,7 +51,12 @@ export function useTableLanding({ restaurantSlug, tableCode, baseUrl }: UseTable
     queryKey: ["table-landing", restaurantSlug, tableCode, base],
     queryFn: async () => {
       const response = await apiFetch(`${base}/t/${restaurantSlug}/${tableCode}`);
-      if (!response.ok) throw new Error(`Table lookup failed: ${response.status}`);
+      if (response.status === 404) {
+        throw new TableLookupError("NOT_FOUND", "Table not found");
+      }
+      if (!response.ok) {
+        throw new TableLookupError("HTTP", `Table lookup failed: ${response.status}`);
+      }
       return response.json();
     },
     enabled: Boolean(restaurantSlug && tableCode),
