@@ -21,23 +21,14 @@ Bill-splitting restaurant demo built on this repo — **guest QR web + waiter ap
 | Staff / waiter | 5174 | `http://<VITE_LAN_HOST>:5174` |
 | API | 3000 | `http://<VITE_LAN_HOST>:3000/v1` |
 
-**Start on Mac mini:** `./scripts/rekentafel-poc.sh`  
-**Cheat sheet:** [docs/rekentafel/POC.md](docs/rekentafel/POC.md)  
-**On-screen QR codes:** `http://<VITE_LAN_HOST>:5173/qr-demo.html`  
-**Waiter iPhone app (on your MacBook):**
+**Start on Mac mini** (repo path: `/Users/willy/jarvis-core`, not `~/cursor-hackathon-thehague`):
 
 ```bash
-./scripts/prepare-waiter-ios.sh <MAC_MINI_IP>
-pnpm --filter @rekentafel/waiter-mobile cap:open:ios
-```
-
-See `docs/rekentafel/POC.md`.
-
-```bash
-cp .env.example .env          # add MOLLIE_API_KEY (test_), VITE_LAN_HOST
-pnpm install
+cd /Users/willy/jarvis-core
 ./scripts/rekentafel-poc.sh
 ```
+
+Leave that terminal open. Optional guest env only: `./scripts/write-guest-env.sh` then `pnpm dev:guest`.
 
 ---
 
