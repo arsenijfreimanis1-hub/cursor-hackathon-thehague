@@ -39,11 +39,13 @@ Score each 1–5 at kickoff. Pick **one** idea — one working journey beats fiv
 
 | Idea | 12h demoable? | 2+ partners? | Use tomorrow? | Split 4 ways? | Local appeal? | **Total** |
 |------|---------------|--------------|---------------|---------------|---------------|-----------|
-| 1 | | | | | | |
-| 2 | | | | | | |
-| 3 | | | | | | |
-| 4 | | | | | | |
-| 5 | | | | | | |
-| 6 | | | | | | |
+| 1 Voice Lead Qualifier | 4 | 5 | 4 | 4 | 4 | **21** |
+| 2 Multilingual City Assistant | 3 | 4 | 4 | 3 | 5 | **19** |
+| 3 Competitor Watchdog | 5 | 4 | 5 | 5 | 2 | **21** |
+| 4 Micro-SaaS (Fluxzero) | 3 | 2 | 4 | 3 | 2 | **14** |
+| 5 Document-to-Action | 4 | 4 | 5 | 4 | 2 | **19** |
+| 6 AI Audio Briefing | 4 | 3 | 3 | 3 | 3 | **16** |
+
+**Pre-kickoff finalists:** See [IDEATION_DECISION.md](IDEATION_DECISION.md) — **Voice Lead Qualifier** vs **Competitor Watchdog** (tie at 21).
 
 **Winner:** _______________

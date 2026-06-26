@@ -6,7 +6,7 @@ Export n8n JSON files to `exports/` after every save in n8n Cloud.
 
 | File | Trigger | Purpose | Status |
 |------|---------|---------|--------|
-| — | — | Add rows as you build | — |
+| `exports/00-healthcheck-webhook.json` | Webhook POST | Smoke test → pings team API `/webhooks/n8n` | Ready to import |
 
 ## Webhook URLs
 

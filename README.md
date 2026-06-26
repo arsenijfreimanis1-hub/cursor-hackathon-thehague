@@ -25,6 +25,7 @@ Do not DM decisions that belong here. If it's not in this README, other Cursor a
 
 | Time (CET) | Dev | Branch | Summary | Needs from team |
 |------------|-----|--------|---------|-----------------|
+| 2026-06-26 11:00 | Lead | `main` | Plan implementation: ARCHITECTURE, smoke tests, n8n webhook API, ideation scoring, perk activation scripts | All devs: run `./scripts/open-perk-activation.sh`, fill `docs/PERK_STATUS.md`, add keys to `.env.local`, run smoke tests |
 | 2026-06-26 — | Lead | `main` | Initial repo bootstrap: MCP config, Mac mini scripts, teammate prompts, perk activation guide | All devs: clone repo, paste your role prompt into Cursor, activate perks, push first commit from your area |
 
 ---
@@ -45,15 +46,17 @@ Do not DM decisions that belong here. If it's not in this README, other Cursor a
 
 | Field | Value |
 |-------|-------|
-| URL | `TBD — Mac mini will expose via cloudflared` |
+| URL | `POST http://localhost:4000/webhooks/n8n` (dev) / `{PUBLIC_WEBHOOK_URL}/webhooks/n8n` (tunnel) |
 | Method | `POST` |
-| Payload | `TBD` |
+| Payload | `{ "event": string, "source": "n8n", ... }` |
+| Response | `{ "received": true, "body": {...}, "ts": "ISO8601" }` |
 
 ### API: Backend (Dev C)
 
 | Endpoint | Method | Request | Response |
 |----------|--------|---------|----------|
 | `/health` | GET | — | `{ "status": "ok" }` |
+| `/webhooks/n8n` | POST | JSON body | `{ "received": true, ... }` |
 
 ### Voice (Dev D — ElevenLabs)
 
@@ -104,15 +107,15 @@ cursor-hackathon-thehague/
 
 | Partner | Code / Link | Status |
 |---------|-------------|--------|
-| Cursor Pro | https://cursor.com/referral?code=YSKZL8N3HWQL | ⬜ Each dev redeems |
-| Apify $30 | `30CURSOR` | ⬜ Each dev redeems |
-| Mobbin 3mo Pro | `CURSORHACKATHONNE26` | ⬜ Each dev redeems |
-| ElevenLabs Creator | Discord `#coupon-codes` + Luma email | ⬜ Each dev redeems |
+| Cursor Pro | https://cursor.com/referral?code=YSKZL8N3HWQL | ⬜ Run `./scripts/open-perk-activation.sh` |
+| Apify $30 | `30CURSOR` | ⬜ Track in `docs/PERK_STATUS.md` |
+| Mobbin 3mo Pro | `CURSORHACKATHONNE26` | ⬜ Track in `docs/PERK_STATUS.md` |
+| ElevenLabs Creator | Discord `#coupon-codes` + Luma email | ⬜ Track in `docs/PERK_STATUS.md` |
 | n8n Cloud Pro | `2026-COMMUNITY-HACKATHON-THEHAGUE-3DDE1312` | ⬜ Team account |
 | Fluxzero | https://fluxzero.io | ⬜ Team signup |
 | WhatsApp | https://chat.whatsapp.com/Hpmqgv7CzwIAtXbJ7f1Eo0 | ⬜ Join |
 
-Full steps: [docs/PERK_ACTIVATION.md](docs/PERK_ACTIVATION.md)
+Full steps: [docs/PERK_ACTIVATION.md](docs/PERK_ACTIVATION.md) · Status tracker: [docs/PERK_STATUS.md](docs/PERK_STATUS.md) · Smoke tests: [docs/SMOKE_TESTS.md](docs/SMOKE_TESTS.md)
 
 ---
 

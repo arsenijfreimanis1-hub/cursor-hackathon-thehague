@@ -32,9 +32,10 @@ Or cron every 2 minutes during hackathon:
 ## Public webhooks (cloudflared)
 
 1. Install: `brew install cloudflared` (or download from Cloudflare)
-2. Quick tunnel: `cloudflared tunnel --url http://localhost:4000`
-3. Copy HTTPS URL → root `README.md` → `PUBLIC_WEBHOOK_URL`
-4. Dev B uses this for n8n webhook triggers pointing at local API
+2. Start API: `cd apps/api && npm run dev`
+3. Run: `./start-tunnel.sh` (from this directory)
+4. Copy HTTPS URL → root `README.md` → `PUBLIC_WEBHOOK_URL`
+5. Dev B uses this for n8n webhook triggers pointing at local API
 
 ## SSH access for team
 
