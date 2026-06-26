@@ -13,3 +13,4 @@ __pycache__/
 .venv/
 mac-mini/.env
 mac-mini/cloudflared/*.json
+.tmp_gh_token

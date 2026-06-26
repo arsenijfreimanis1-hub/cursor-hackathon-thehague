@@ -133,7 +133,7 @@ See [mac-mini/README.md](mac-mini/README.md).
 ## Quick start (every teammate)
 
 ```bash
-git clone <REPO_URL> cursor-hackathon-thehague
+git clone https://github.com/arsenijfreimanis1-hub/cursor-hackathon-thehague.git
 cd cursor-hackathon-thehague
 cp .env.example .env.local   # fill in your keys locally — never commit
 git pull origin main
