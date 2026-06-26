@@ -1,8 +1,10 @@
 import { useParams } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTableLanding, TableLookupError } from "@rekentafel/guest-hooks";
 import { LanguageSwitcher, useT } from "@rekentafel/i18n";
 import { Badge, Button, Card, formatEuro, PageShell } from "@rekentafel/ui-core";
 import { API_BASE } from "../config";
+import { CallWaiterButton } from "../components/CallWaiterButton";
 
 type MenuCategory = {
   category_id: string;
@@ -23,6 +25,7 @@ export function TableLandingPage() {
     tableCode,
     baseUrl: API_BASE,
   });
+  const [waiterCalled, setWaiterCalled] = useState(false);
 
   if (isLoading) {
     return (
@@ -69,11 +72,14 @@ export function TableLandingPage() {
       subtitle={t("guest.table.welcome")}
       headerExtra={<LanguageSwitcher />}
       footer={
-        paymentActive ? (
-          <Button onClick={() => { window.location.href = `/session/${hint.payment_session_id}/join`; }}>
-            {t("guest.table.joinBill")}
-          </Button>
-        ) : undefined
+        <div className="landing-footer-actions">
+          {paymentActive ? (
+            <Button onClick={() => { window.location.href = `/session/${hint.payment_session_id}/join`; }}>
+              {t("guest.table.joinBill")}
+            </Button>
+          ) : null}
+          <CallWaiterButton sent={waiterCalled} onCall={() => setWaiterCalled(true)} />
+        </div>
       }
     >
       <div className="landing-hero">
@@ -90,6 +96,10 @@ export function TableLandingPage() {
         <p className="muted" style={{ marginTop: "1rem" }}>
           {paymentActive ? t("guest.table.paymentReady") : t("guest.table.waiting")}
         </p>
+      </Card>
+
+      <Card title={t("guest.table.serviceTitle")} subtitle={t("guest.table.serviceSubtitle")}>
+        <CallWaiterButton sent={waiterCalled} onCall={() => setWaiterCalled(true)} />
       </Card>
 
       {menu.categories.map((category) => (

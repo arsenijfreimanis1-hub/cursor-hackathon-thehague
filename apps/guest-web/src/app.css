@@ -54,6 +54,28 @@ body {
   gap: 0.75rem;
 }
 
+.landing-footer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.guest-call-waiter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.guest-call-waiter__btn {
+  width: 100%;
+}
+
+.guest-call-waiter__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
 .landing-menu-preview {
   display: flex;
   justify-content: space-between;
