@@ -4,8 +4,9 @@
 > Every teammate must read this before starting work and update it after every push.
 
 **Event:** Cursor Hackathon, The Hague — June 26, 2026  
-**Team:** AJ · Justin · Tarik · Leo (+ Mac mini hub)  
+**Team:** AJ · Justin · Tarik · Leo — **equal developers**, one product  
 **Product:** **Competitor Watchdog** — [docs/PRODUCT.md](docs/PRODUCT.md)  
+**Cursor prompt (same for everyone):** [CURSOR_PROMPT.md](CURSOR_PROMPT.md)  
 **Pack:** #054
 
 ---
@@ -16,7 +17,7 @@
 2. **After every meaningful change:** commit, push, update **Changelog** below
 3. **Blockers:** add to **Requests / Blockers**
 4. **API changes:** update **Integration Contracts** immediately
-5. **AJ:** runs `mac-mini/sync-from-github.sh` after pushes
+5. **Mac mini:** whoever is on it runs `mac-mini/sync-from-github.sh` after pushes
 
 ---
 
@@ -24,9 +25,8 @@
 
 | Time (CET) | Who | Summary | Needs |
 |------------|-----|---------|-------|
-| 2026-06-26 12:00 | AJ | Team restructure: `AJ/` `Justin/` `Tarik/` `Leo/` folders, Competitor Watchdog locked, integration API, email-ready prompts | Everyone: pull, read your `CURSOR_PROMPT.md`, add keys to `.env.local`, run `./scripts/connect-services.sh` |
-| 2026-06-26 11:00 | AJ | Architecture, smoke tests, ideation scoring | — |
-| 2026-06-26 — | AJ | Initial repo bootstrap | — |
+| 2026-06-26 12:30 | AJ | Unified `CURSOR_PROMPT.md` for all devs (no role split); Mobbin MCP added; equal developer model | Everyone: paste `CURSOR_PROMPT.md`, use own keys in `.env.local` |
+| 2026-06-26 12:00 | AJ | Member folders, Competitor Watchdog, integration API | — |
 
 ---
 
@@ -34,20 +34,20 @@
 
 | From | To | Status | Message |
 |------|-----|--------|---------|
-| AJ | All | OPEN | Pull latest, paste your `CURSOR_PROMPT.md` into Cursor, verify perks in `.env.local` |
+| AJ | All | OPEN | Pull latest, paste **`CURSOR_PROMPT.md`** into Cursor, add **your own** keys to `.env.local` |
 
 ---
 
-## Team & folders
+## Team folders (organization only — no fixed roles)
 
-| Person | Folder | Owns |
-|--------|--------|------|
-| **AJ** | `AJ/` + `mac-mini/` | Infra, tunnel, README, merges, integration tests |
-| **Justin** | `Justin/web/` | Dashboard UI (Mobbin) |
-| **Tarik** | `Tarik/api/` | REST API, Apify scraping |
-| **Leo** | `Leo/workflows/` | n8n automation, pitch script |
+| Folder | Use for |
+|--------|---------|
+| `AJ/` | AJ's notes and work |
+| `Justin/` | Justin's notes and work |
+| `Tarik/` | Tarik's notes and work |
+| `Leo/` | Leo's notes and work |
 
-**Cursor prompts (email to teammates):** `Justin/CURSOR_PROMPT.md` · `Tarik/CURSOR_PROMPT.md` · `Leo/CURSOR_PROMPT.md` · `AJ/CURSOR_PROMPT.md`
+Shared code: `Tarik/api/`, `Justin/web/`, `Leo/workflows/`, `mac-mini/`. Anyone can edit anywhere — update README when you do.
 
 ---
 
@@ -57,7 +57,7 @@
 - Dev: `http://localhost:4000`
 - Tunnel: `PUBLIC_WEBHOOK_URL` in `.env.local` (AJ sets from Mac mini)
 
-### Endpoints (Tarik)
+### Endpoints (shared API in `Tarik/api/`)
 
 | Endpoint | Method | Body | Response |
 |----------|--------|------|----------|

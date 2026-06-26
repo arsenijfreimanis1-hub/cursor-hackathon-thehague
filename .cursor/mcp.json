@@ -2,6 +2,11 @@
   "mcpServers": {
     "apify": {
       "url": "https://mcp.apify.com"
+    },
+    "Mobbin": {
+      "type": "http",
+      "url": "https://api.mobbin.com/mcp",
+      "headers": {}
     }
   }
 }

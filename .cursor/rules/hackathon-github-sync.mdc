@@ -20,9 +20,9 @@ You are on a 4-person hackathon team. The README.md is the team bus — other Cu
 
 ## Your scope
 
-Only edit files in your assigned folder (`AJ/`, `Justin/`, `Tarik/`, `Leo/`) unless coordinating a cross-cutting change (document it in README first).
+Only edit files in your personal folder (`AJ/`, `Justin/`, `Tarik/`, `Leo/`) by default — but anyone may work anywhere on shared code. Document cross-cutting changes in README first.
 
-Team: AJ, Justin, Tarik, Leo. Product: Competitor Watchdog.
+Everyone has the same developer role. Product: Competitor Watchdog. Each dev uses their own API keys in `.env.local`.
 
 ## Mac mini
 
