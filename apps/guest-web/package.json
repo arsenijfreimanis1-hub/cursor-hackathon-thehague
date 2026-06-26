@@ -1,0 +1,30 @@
+{
+  "name": "@rekentafel/guest-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@rekentafel/guest-hooks": "workspace:*",
+    "@rekentafel/ui-core": "workspace:*",
+    "@tanstack/react-query": "^5.81.5",
+    "@tanstack/react-router": "^1.125.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@rekentafel/config": "workspace:*",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "eslint": "^9.29.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

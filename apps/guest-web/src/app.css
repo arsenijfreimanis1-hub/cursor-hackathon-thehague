@@ -1,0 +1,75 @@
+.main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.hero {
+  margin-bottom: 1.5rem;
+}
+
+.hero h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+
+.muted {
+  color: var(--rt-muted);
+}
+
+.stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.bill-lines {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.bill-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--rt-border);
+}
+
+.bill-line > div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  background: var(--rt-border);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+}
+
+.error {
+  color: #dc2626;
+  font-size: 0.875rem;
+}
+
+input {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: var(--rt-radius);
+  border: 1px solid var(--rt-border);
+  background: var(--rt-bg);
+  color: var(--rt-text);
+  margin-top: 0.25rem;
+}
+
+label {
+  display: block;
+  font-size: 0.875rem;
+}

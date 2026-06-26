@@ -1,0 +1,970 @@
+// Rekentafel MVP — Prisma schema draft (Phase 0, no migrations applied)
+// Registry: dining_session_id, payment_session_id, participant_id, bill_version
+// Source: docs/architecture/data-model/entity-dictionary.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+
+enum RestaurantStatus {
+  DRAFT
+  ONBOARDING
+  ACTIVE
+  SUSPENDED
+  CHURNED
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum StaffRole {
+  WAITER
+  MANAGER
+  ADMIN
+  PLATFORM_OPS
+}
+
+enum DiningSessionState {
+  EMPTY
+  SEATED
+  PAYMENT_ACTIVE
+  CLOSED
+}
+
+enum CloseReasonCode {
+  NORMAL
+  FORCE_CASH
+  WALKOUT
+  CANCEL
+}
+
+enum PaymentSessionState {
+  OPEN
+  PARTIALLY_PAID
+  FULLY_PAID
+  CLOSED
+  DISPUTED
+}
+
+enum TokenState {
+  ISSUED
+  EXPIRED
+  REVOKED
+}
+
+enum ParticipantState {
+  JOINED
+  ALLOCATING
+  CHECKOUT_LOCKED
+  PAYMENT_PENDING
+  PAID
+  PAYMENT_FAILED
+  RELEASED
+  OVERRIDDEN
+}
+
+enum BillSettlementState {
+  BILL_DRAFT
+  ALLOCATION_OPEN
+  ALLOCATION_FROZEN
+  CHECKOUT_IN_PROGRESS
+  PARTIALLY_PAID
+  FULLY_PAID
+  CLOSED
+  VOID
+}
+
+enum BillLineKind {
+  MENU_ITEM
+  SERVICE_CHARGE
+  DISCOUNT
+  ROUNDING_ADJ
+  MANUAL_MISC
+}
+
+enum SplitMode {
+  ITEM
+  EQUAL
+  CUSTOM
+  SHARED
+}
+
+enum AllocationState {
+  DRAFT
+  COMMITTED
+  LOCKED_FOR_CHECKOUT
+  RELEASED
+  INVALIDATED
+}
+
+enum PledgeState {
+  ACTIVE
+  LOCKED
+  SETTLED
+  CANCELLED
+}
+
+enum CheckoutIntentState {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentIntentStatus {
+  CREATING
+  MOLLIE_OPEN
+  PAID
+  FAILED
+  CANCELED
+  EXPIRED
+  FAILED_CREATE
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CHARGEBACK
+}
+
+enum SettlementStatus {
+  PENDING
+  AVAILABLE
+  PAID_OUT
+}
+
+enum TipDestination {
+  PASS_THROUGH
+  VENUE_POOL
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum ServiceSignalType {
+  READY_TO_ORDER
+  ASSISTANCE
+}
+
+enum ServiceSignalStatus {
+  OPEN
+  ACKNOWLEDGED
+  EXPIRED
+}
+
+enum OrderSource {
+  MANUAL
+  POS_IMPORT
+  CSV
+}
+
+enum OrderStatus {
+  OPEN
+  CLOSED
+  VOID
+}
+
+enum RewardsAccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum RewardsEntryType {
+  ACCRUAL
+  REVERSAL
+  REDEMPTION
+  ADJUSTMENT
+}
+
+enum RedemptionStatus {
+  REQUESTED
+  ISSUED
+  REDEEMED
+  EXPIRED
+  CANCELLED
+}
+
+enum WebhookSource {
+  MOLLIE
+  CRYPTO
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  SKIPPED_DUPLICATE
+}
+
+enum AuditActorType {
+  GUEST
+  STAFF
+  SYSTEM
+  MOLLIE_WEBHOOK
+}
+
+enum DisputeType {
+  CHARGEBACK
+  GUEST_COMPLAINT
+  REFUND_REQUEST
+}
+
+enum DisputeStatus {
+  OPEN
+  EVIDENCE_GATHERING
+  WON
+  LOST
+  CLOSED
+}
+
+enum IncidentSeverity {
+  SEV1
+  SEV2
+  SEV3
+  SEV4
+}
+
+enum IncidentStatus {
+  OPEN
+  MITIGATING
+  RESOLVED
+}
+
+// --- Tenancy ---
+
+model Restaurant {
+  id               String           @id @default(uuid()) @db.Uuid
+  slug             String           @unique @db.VarChar(64)
+  legalName        String           @map("legal_name") @db.VarChar(255)
+  tradeName        String           @map("trade_name") @db.VarChar(255)
+  kvkNumber        String?          @map("kvk_number") @db.VarChar(8)
+  vatNumber        String?          @map("vat_number") @db.VarChar(14)
+  countryCode      String           @default("NL") @map("country_code") @db.Char(2)
+  defaultCurrency  String           @default("EUR") @map("default_currency") @db.Char(3)
+  status           RestaurantStatus
+  mollieOrgId      String?          @map("mollie_org_id") @db.VarChar(32)
+  paymentsEnabled  Boolean          @default(false) @map("payments_enabled")
+  settingsJson     Json             @default("{}") @map("settings_json")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz(6)
+
+  venues            Venue[]
+  staffMembers      StaffMember[]
+  menuCategories    MenuCategory[]
+  mollieConnection  MollieConnection?
+  diningSessions    DiningSession[]
+  bills             Bill[]
+  paymentIntents    PaymentIntent[]
+  payments          Payment[]
+  auditLogEntries   AuditLogEntry[]
+  disputes          Dispute[]
+  incidents         Incident[]
+
+  @@map("restaurants")
+}
+
+model Venue {
+  id           String   @id @default(uuid()) @db.Uuid
+  restaurantId String   @map("restaurant_id") @db.Uuid
+  name         String   @db.VarChar(255)
+  timezone     String   @default("Europe/Amsterdam") @db.VarChar(64)
+  addressLine1 String?  @map("address_line1") @db.VarChar(255)
+  city         String?  @db.VarChar(128)
+  postalCode   String?  @map("postal_code") @db.VarChar(16)
+  geoLat       Decimal? @map("geo_lat") @db.Decimal(9, 6)
+  geoLng       Decimal? @map("geo_lng") @db.Decimal(9, 6)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  restaurant     Restaurant      @relation(fields: [restaurantId], references: [id])
+  tables         Table[]
+  menuCategories MenuCategory[]
+  diningSessions DiningSession[]
+
+  @@map("venues")
+}
+
+model Table {
+  id                      String          @id @default(uuid()) @db.Uuid
+  venueId                 String          @map("venue_id") @db.Uuid
+  tableCode               String          @map("table_code") @db.VarChar(16)
+  section                 String?         @db.VarChar(64)
+  seats                   Int?            @db.SmallInt
+  sortOrder               Int             @default(0) @map("sort_order")
+  isActive                Boolean         @default(true) @map("is_active")
+  currentDiningSessionId  String?         @map("current_dining_session_id") @db.Uuid
+  createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  venue                 Venue            @relation(fields: [venueId], references: [id])
+  currentDiningSession  DiningSession?   @relation("TableCurrentSession", fields: [currentDiningSessionId], references: [id])
+  qrCode                TableQrCode?
+  diningSessions        DiningSession[]  @relation("TableSessions")
+  serviceSignals        ServiceSignal[]
+
+  @@unique([venueId, tableCode])
+  @@map("tables")
+}
+
+model TableQrCode {
+  id           String    @id @default(uuid()) @db.Uuid
+  tableId      String    @unique @map("table_id") @db.Uuid
+  publicSlug   String    @unique @map("public_slug") @db.VarChar(32)
+  qrPayloadUrl String    @map("qr_payload_url")
+  version      Int       @default(1)
+  rotatedAt    DateTime? @map("rotated_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  table Table @relation(fields: [tableId], references: [id])
+
+  @@map("table_qr_codes")
+}
+
+// --- Identity ---
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  email           String?    @unique
+  emailVerifiedAt DateTime?  @map("email_verified_at") @db.Timestamptz(6)
+  phoneE164       String?    @unique @map("phone_e164") @db.VarChar(16)
+  displayName     String?    @map("display_name") @db.VarChar(64)
+  locale          String     @default("nl-NL") @db.VarChar(8)
+  status          UserStatus
+  passwordHash    String?    @map("password_hash")
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz(6)
+
+  guestDevices    GuestDevice[]
+  staffMembers    StaffMember[]
+  participants    Participant[]
+  rewardsAccount  RewardsAccount?
+
+  @@map("users")
+}
+
+model GuestDevice {
+  id              String   @id @default(uuid()) @db.Uuid
+  fingerprintHash String?  @map("fingerprint_hash") @db.Char(64)
+  firstSeenAt     DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt      DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  userId          String?  @map("user_id") @db.Uuid
+  ipHash          String?  @map("ip_hash") @db.Char(64)
+
+  user           User?           @relation(fields: [userId], references: [id])
+  participants   Participant[]
+  serviceSignals ServiceSignal[]
+
+  @@map("guest_devices")
+}
+
+model StaffMember {
+  id           String    @id @default(uuid()) @db.Uuid
+  restaurantId String    @map("restaurant_id") @db.Uuid
+  venueId      String?   @map("venue_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  role         StaffRole
+  employeeCode String?   @map("employee_code") @db.VarChar(32)
+  pinHash      String?   @map("pin_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  invitedAt    DateTime? @map("invited_at") @db.Timestamptz(6)
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+
+  restaurant              Restaurant        @relation(fields: [restaurantId], references: [id])
+  user                    User              @relation(fields: [userId], references: [id])
+  devices                 StaffDevice[]
+  openedDiningSessions    DiningSession[]   @relation("OpenedByStaff")
+  closedDiningSessions    DiningSession[]   @relation("ClosedByStaff")
+  openedPaymentSessions   PaymentSession[]  @relation("PaymentOpenedByStaff")
+  acknowledgedSignals     ServiceSignal[]   @relation("AcknowledgedByStaff")
+  paymentRefunds          PaymentRefund[]
+  auditLogEntries         AuditLogEntry[]
+
+  @@unique([restaurantId, userId])
+  @@map("staff_members")
+}
+
+model StaffDevice {
+  id            String   @id @default(uuid()) @db.Uuid
+  staffMemberId String   @map("staff_member_id") @db.Uuid
+  deviceLabel   String?  @map("device_label") @db.VarChar(64)
+  pushToken     String?  @map("push_token")
+  lastActiveAt  DateTime @map("last_active_at") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id])
+
+  @@map("staff_devices")
+}
+
+// --- Sessions ---
+
+model DiningSession {
+  id                     String             @id @default(uuid()) @db.Uuid
+  tableId                String             @map("table_id") @db.Uuid
+  venueId                String             @map("venue_id") @db.Uuid
+  restaurantId           String             @map("restaurant_id") @db.Uuid
+  state                  DiningSessionState
+  partySize              Int?               @map("party_size") @db.SmallInt
+  openedByStaffId        String?            @map("opened_by_staff_id") @db.Uuid
+  closedByStaffId        String?            @map("closed_by_staff_id") @db.Uuid
+  openedAt               DateTime           @map("opened_at") @db.Timestamptz(6)
+  closedAt               DateTime?          @map("closed_at") @db.Timestamptz(6)
+  closeReason            CloseReasonCode?   @map("close_reason")
+  activePaymentSessionId String?            @map("active_payment_session_id") @db.Uuid
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  table                Table             @relation("TableSessions", fields: [tableId], references: [id])
+  venue                Venue             @relation(fields: [venueId], references: [id])
+  restaurant           Restaurant        @relation(fields: [restaurantId], references: [id])
+  openedByStaff        StaffMember?      @relation("OpenedByStaff", fields: [openedByStaffId], references: [id])
+  closedByStaff        StaffMember?      @relation("ClosedByStaff", fields: [closedByStaffId], references: [id])
+  activePaymentSession PaymentSession?   @relation("ActivePaymentSession", fields: [activePaymentSessionId], references: [id])
+  tablesCurrent        Table[]           @relation("TableCurrentSession")
+  paymentSessions      PaymentSession[]
+  bills                Bill[]
+  orders               Order[]
+
+  @@map("dining_sessions")
+}
+
+model PaymentSession {
+  id               String              @id @default(uuid()) @db.Uuid
+  diningSessionId  String              @map("dining_session_id") @db.Uuid
+  billId           String              @unique @map("bill_id") @db.Uuid
+  state            PaymentSessionState
+  joinPin          String?             @map("join_pin") @db.Char(6)
+  claimsFrozen     Boolean             @default(false) @map("claims_frozen")
+  openedByStaffId  String              @map("opened_by_staff_id") @db.Uuid
+  openedAt         DateTime            @map("opened_at") @db.Timestamptz(6)
+  completedAt      DateTime?           @map("completed_at") @db.Timestamptz(6)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  diningSession       DiningSession         @relation(fields: [diningSessionId], references: [id])
+  bill                Bill                  @relation(fields: [billId], references: [id])
+  openedByStaff       StaffMember           @relation("PaymentOpenedByStaff", fields: [openedByStaffId], references: [id])
+  tokens              PaymentSessionToken[]
+  participants        Participant[]
+  checkoutIntents     CheckoutIntent[]
+  paymentIntents      PaymentIntent[]
+  payments            Payment[]
+  diningSessionsActive DiningSession[]      @relation("ActivePaymentSession")
+
+  @@map("payment_sessions")
+}
+
+model PaymentSessionToken {
+  id               String     @id @default(uuid()) @db.Uuid
+  paymentSessionId String     @map("payment_session_id") @db.Uuid
+  tokenHash        String     @unique @map("token_hash") @db.Char(64)
+  state            TokenState
+  issuedAt         DateTime   @map("issued_at") @db.Timestamptz(6)
+  expiresAt        DateTime   @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  rotationReason   String?    @map("rotation_reason") @db.VarChar(32)
+  refreshCount     Int        @default(0) @map("refresh_count") @db.SmallInt
+
+  paymentSession PaymentSession @relation(fields: [paymentSessionId], references: [id])
+
+  @@map("payment_session_tokens")
+}
+
+model Participant {
+  id               String           @id @default(uuid()) @db.Uuid
+  paymentSessionId String           @map("payment_session_id") @db.Uuid
+  guestDeviceId    String           @map("guest_device_id") @db.Uuid
+  userId           String?          @map("user_id") @db.Uuid
+  displayName      String           @map("display_name") @db.VarChar(32)
+  state            ParticipantState
+  joinedAt         DateTime         @map("joined_at") @db.Timestamptz(6)
+  leftAt           DateTime?        @map("left_at") @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  paymentSession  PaymentSession   @relation(fields: [paymentSessionId], references: [id])
+  guestDevice     GuestDevice      @relation(fields: [guestDeviceId], references: [id])
+  user            User?            @relation(fields: [userId], references: [id])
+  allocations     Allocation[]
+  customPledges   CustomPledge[]
+  checkoutIntents CheckoutIntent[]
+  paymentIntents  PaymentIntent[]
+  payments        Payment[]
+
+  @@map("participants")
+}
+
+// --- Menu ---
+
+model MenuCategory {
+  id           String @id @default(uuid()) @db.Uuid
+  restaurantId String @map("restaurant_id") @db.Uuid
+  venueId      String @map("venue_id") @db.Uuid
+  name         String @db.VarChar(255)
+  sortOrder    Int    @default(0) @map("sort_order")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  venue      Venue      @relation(fields: [venueId], references: [id])
+  items      MenuItem[]
+
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id                 String  @id @default(uuid()) @db.Uuid
+  categoryId         String  @map("category_id") @db.Uuid
+  name               String  @db.VarChar(255)
+  description        String?
+  priceDisplayCents  Int     @map("price_display_cents")
+  vatRateBps         Int     @map("vat_rate_bps")
+  allergensJson      Json    @default("[]") @map("allergens_json")
+  isAvailable        Boolean @default(true) @map("is_available")
+  sortOrder          Int     @default(0) @map("sort_order")
+
+  category  MenuCategory @relation(fields: [categoryId], references: [id])
+  billLines BillLine[]
+
+  @@map("menu_items")
+}
+
+// --- Orders (schema only, no MVP writes) ---
+
+model Order {
+  id                  String      @id @default(uuid()) @db.Uuid
+  diningSessionId     String      @map("dining_session_id") @db.Uuid
+  externalPosCheckId  String?     @map("external_pos_check_id") @db.VarChar(64)
+  source              OrderSource
+  status              OrderStatus
+
+  diningSession DiningSession @relation(fields: [diningSessionId], references: [id])
+  items         OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String @id @default(uuid()) @db.Uuid
+  orderId         String @map("order_id") @db.Uuid
+  externalLineId  String @map("external_line_id") @db.VarChar(64)
+
+  order     Order      @relation(fields: [orderId], references: [id])
+  billLines BillLine[]
+
+  @@map("order_items")
+}
+
+// --- Bills & split engine ---
+
+model Bill {
+  id                    String              @id @default(uuid()) @db.Uuid
+  diningSessionId       String              @map("dining_session_id") @db.Uuid
+  restaurantId          String              @map("restaurant_id") @db.Uuid
+  currency              String              @default("EUR") @db.Char(3)
+  billVersion           Int                 @default(1) @map("bill_version")
+  settlementState       BillSettlementState @map("settlement_state")
+  menuSubtotalCents     Int                 @default(0) @map("menu_subtotal_cents")
+  serviceChargeCents    Int                 @default(0) @map("service_charge_cents")
+  discountCents         Int                 @default(0) @map("discount_cents")
+  billGrandTotalCents   Int                 @map("bill_grand_total_cents")
+  allocatedCents        Int                 @default(0) @map("allocated_cents")
+  confirmedPaidCents    Int                 @default(0) @map("confirmed_paid_cents")
+  unclaimedCents        Int                 @default(0) @map("unclaimed_cents")
+  activeCheckoutCount   Int                 @default(0) @map("active_checkout_count")
+  lockedAt              DateTime?           @map("locked_at") @db.Timestamptz(6)
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  paymentSession PaymentSession?
+  diningSession  DiningSession  @relation(fields: [diningSessionId], references: [id])
+  restaurant     Restaurant     @relation(fields: [restaurantId], references: [id])
+  lines          BillLine[]
+  allocations    Allocation[]
+  customPledges  CustomPledge[]
+  stateEvents    BillStateEvent[]
+
+  @@map("bills")
+}
+
+model BillLine {
+  id                     String       @id @default(uuid()) @db.Uuid
+  billId                 String       @map("bill_id") @db.Uuid
+  lineKind               BillLineKind @map("line_kind")
+  name                   String       @db.VarChar(255)
+  qty                    Decimal      @db.Decimal(8, 3)
+  unitPriceIncVatCents   Int          @map("unit_price_inc_vat_cents")
+  vatRateBps             Int          @map("vat_rate_bps")
+  lineTotalIncVatCents   Int          @map("line_total_inc_vat_cents")
+  splittable             Boolean      @default(false)
+  maxShares              Int?         @map("max_shares") @db.SmallInt
+  menuItemId             String?      @map("menu_item_id") @db.Uuid
+  orderItemId            String?      @map("order_item_id") @db.Uuid
+  sortOrder              Int          @default(0) @map("sort_order")
+  voidedAt               DateTime?    @map("voided_at") @db.Timestamptz(6)
+
+  bill             Bill              @relation(fields: [billId], references: [id])
+  menuItem         MenuItem?         @relation(fields: [menuItemId], references: [id])
+  orderItem        OrderItem?        @relation(fields: [orderItemId], references: [id])
+  allocatableUnits AllocatableUnit[]
+
+  @@map("bill_lines")
+}
+
+model AllocatableUnit {
+  id             String @id @default(uuid()) @db.Uuid
+  billLineId     String @map("bill_line_id") @db.Uuid
+  unitIndex      Int    @map("unit_index") @db.SmallInt
+  unitValueCents Int    @map("unit_value_cents")
+  maxShares      Int    @default(1) @map("max_shares") @db.SmallInt
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  billLine    BillLine     @relation(fields: [billLineId], references: [id])
+  allocations Allocation[]
+
+  @@unique([billLineId, unitIndex])
+  @@map("allocatable_units")
+}
+
+model Allocation {
+  id                      String          @id @default(uuid()) @db.Uuid
+  billId                  String          @map("bill_id") @db.Uuid
+  billVersion             Int             @map("bill_version")
+  allocatableUnitId       String          @map("allocatable_unit_id") @db.Uuid
+  participantId           String          @map("participant_id") @db.Uuid
+  splitMode               SplitMode       @map("split_mode")
+  shareNumerator          Int             @default(1) @map("share_numerator") @db.SmallInt
+  shareDenominator        Int             @default(1) @map("share_denominator") @db.SmallInt
+  allocatedAmountCents    Int             @map("allocated_amount_cents")
+  serviceChargeShareCents Int             @default(0) @map("service_charge_share_cents")
+  equalGroupId            String?         @map("equal_group_id") @db.Uuid
+  customPledgeId          String?         @map("custom_pledge_id") @db.Uuid
+  state                   AllocationState
+  version                 Int             @default(1)
+  committedAt             DateTime?       @map("committed_at") @db.Timestamptz(6)
+  releasedAt              DateTime?       @map("released_at") @db.Timestamptz(6)
+  createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  bill            Bill            @relation(fields: [billId], references: [id])
+  allocatableUnit AllocatableUnit @relation(fields: [allocatableUnitId], references: [id])
+  participant     Participant     @relation(fields: [participantId], references: [id])
+  customPledge    CustomPledge?   @relation(fields: [customPledgeId], references: [id])
+
+  @@map("allocations")
+}
+
+model CustomPledge {
+  id            String      @id @default(uuid()) @db.Uuid
+  billId        String      @map("bill_id") @db.Uuid
+  participantId String      @map("participant_id") @db.Uuid
+  amountCents   Int         @map("amount_cents")
+  state         PledgeState
+
+  bill         Bill         @relation(fields: [billId], references: [id])
+  participant  Participant  @relation(fields: [participantId], references: [id])
+  allocations  Allocation[]
+
+  @@map("custom_pledges")
+}
+
+// --- Checkout & payments ---
+
+model CheckoutIntent {
+  id                     String              @id @default(uuid()) @db.Uuid
+  paymentSessionId       String              @map("payment_session_id") @db.Uuid
+  participantId          String              @map("participant_id") @db.Uuid
+  billId                 String              @map("bill_id") @db.Uuid
+  billVersion            Int                 @map("bill_version")
+  subtotalCents          Int                 @map("subtotal_cents")
+  tipCents               Int                 @default(0) @map("tip_cents")
+  checkoutTotalCents     Int                 @map("checkout_total_cents")
+  allocationSnapshotJson Json                @map("allocation_snapshot_json")
+  idempotencyKey         String              @unique @map("idempotency_key") @db.VarChar(128)
+  state                  CheckoutIntentState
+  expiresAt              DateTime            @map("expires_at") @db.Timestamptz(6)
+  createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  paymentSession PaymentSession @relation(fields: [paymentSessionId], references: [id])
+  participant    Participant    @relation(fields: [participantId], references: [id])
+  paymentIntent  PaymentIntent?
+  tip            Tip?
+
+  @@map("checkout_intents")
+}
+
+model PaymentIntent {
+  id                String              @id @default(uuid()) @db.Uuid
+  checkoutIntentId  String              @unique @map("checkout_intent_id") @db.Uuid
+  paymentSessionId  String              @map("payment_session_id") @db.Uuid
+  participantId     String              @map("participant_id") @db.Uuid
+  restaurantId      String              @map("restaurant_id") @db.Uuid
+  molliePaymentId   String?             @unique @map("mollie_payment_id") @db.VarChar(32)
+  status            PaymentIntentStatus
+  amountCents       Int                 @map("amount_cents")
+  currency          String              @db.Char(3)
+  method            String?             @db.VarChar(32)
+  idempotencyKey    String              @unique @map("idempotency_key") @db.VarChar(128)
+  billVersion       Int                 @map("bill_version")
+  metadataJson      Json                @default("{}") @map("metadata_json")
+  mollieCheckoutUrl String?             @map("mollie_checkout_url")
+  failureReason     String?             @map("failure_reason")
+  paidAt            DateTime?           @map("paid_at") @db.Timestamptz(6)
+  expiresAt         DateTime?           @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  checkoutIntent CheckoutIntent @relation(fields: [checkoutIntentId], references: [id])
+  paymentSession PaymentSession @relation(fields: [paymentSessionId], references: [id])
+  participant    Participant    @relation(fields: [participantId], references: [id])
+  restaurant     Restaurant     @relation(fields: [restaurantId], references: [id])
+  payment        Payment?
+
+  @@map("payment_intents")
+}
+
+model Payment {
+  id                 String           @id @default(uuid()) @db.Uuid
+  paymentIntentId    String           @unique @map("payment_intent_id") @db.Uuid
+  molliePaymentId    String           @unique @map("mollie_payment_id") @db.VarChar(32)
+  restaurantId       String           @map("restaurant_id") @db.Uuid
+  paymentSessionId   String           @map("payment_session_id") @db.Uuid
+  participantId      String           @map("participant_id") @db.Uuid
+  amountCents        Int              @map("amount_cents")
+  subtotalShareCents Int              @map("subtotal_share_cents")
+  tipCents           Int              @default(0) @map("tip_cents")
+  method             String           @db.VarChar(32)
+  paidAt             DateTime         @map("paid_at") @db.Timestamptz(6)
+  settlementStatus   SettlementStatus @map("settlement_status")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  paymentIntent PaymentIntent   @relation(fields: [paymentIntentId], references: [id])
+  restaurant    Restaurant      @relation(fields: [restaurantId], references: [id])
+  paymentSession PaymentSession @relation(fields: [paymentSessionId], references: [id])
+  participant   Participant     @relation(fields: [participantId], references: [id])
+  tip           Tip?
+  refunds       PaymentRefund[]
+  disputes      Dispute[]
+  rewardsLedger RewardsLedgerEntry[]
+
+  @@map("payments")
+}
+
+model Tip {
+  id               String         @id @default(uuid()) @db.Uuid
+  checkoutIntentId String         @unique @map("checkout_intent_id") @db.Uuid
+  paymentId        String?        @unique @map("payment_id") @db.Uuid
+  basisCents       Int            @map("basis_cents")
+  tipCents         Int            @map("tip_cents")
+  tipPercentBps    Int?           @map("tip_percent_bps")
+  destination      TipDestination
+
+  checkoutIntent CheckoutIntent @relation(fields: [checkoutIntentId], references: [id])
+  payment        Payment?       @relation(fields: [paymentId], references: [id])
+
+  @@map("tips")
+}
+
+model PaymentRefund {
+  id                String       @id @default(uuid()) @db.Uuid
+  paymentId         String       @map("payment_id") @db.Uuid
+  mollieRefundId    String       @unique @map("mollie_refund_id") @db.VarChar(32)
+  amountCents       Int          @map("amount_cents")
+  status            RefundStatus
+  initiatedByStaffId String?     @map("initiated_by_staff_id") @db.Uuid
+  reason            String?
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payment           Payment      @relation(fields: [paymentId], references: [id])
+  initiatedByStaff  StaffMember? @relation(fields: [initiatedByStaffId], references: [id])
+
+  @@map("payment_refunds")
+}
+
+model MollieConnection {
+  id               String    @id @default(uuid()) @db.Uuid
+  restaurantId     String    @unique @map("restaurant_id") @db.Uuid
+  mollieOrgId      String?   @map("mollie_org_id") @db.VarChar(32)
+  accessTokenEnc   Bytes?    @map("access_token_enc")
+  refreshTokenEnc  Bytes?    @map("refresh_token_enc")
+  tokenExpiresAt   DateTime? @map("token_expires_at") @db.Timestamptz(6)
+  onboardingStatus String?   @map("onboarding_status") @db.VarChar(32)
+  scopes           String[]
+  connectedAt      DateTime? @map("connected_at") @db.Timestamptz(6)
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@map("mollie_connections")
+}
+
+// --- Rewards (V1.1 preview, no MVP spend) ---
+
+model RewardsAccount {
+  id             String               @id @default(uuid()) @db.Uuid
+  userId         String               @unique @map("user_id") @db.Uuid
+  pointsBalance  Int                  @default(0) @map("points_balance")
+  lifetimePoints Int                  @default(0) @map("lifetime_points")
+  status         RewardsAccountStatus
+
+  user    User                 @relation(fields: [userId], references: [id])
+  ledger  RewardsLedgerEntry[]
+  redemptions Redemption[]
+
+  @@map("rewards_accounts")
+}
+
+model RewardsLedgerEntry {
+  id               String           @id @default(uuid()) @db.Uuid
+  rewardsAccountId String           @map("rewards_account_id") @db.Uuid
+  entryType        RewardsEntryType @map("entry_type")
+  pointsDelta      Int              @map("points_delta")
+  paymentId        String?          @map("payment_id") @db.Uuid
+  redemptionId     String?          @map("redemption_id") @db.Uuid
+  idempotencyKey   String           @unique @map("idempotency_key") @db.VarChar(128)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  rewardsAccount RewardsAccount @relation(fields: [rewardsAccountId], references: [id])
+  payment        Payment?       @relation(fields: [paymentId], references: [id])
+  redemption     Redemption?    @relation(fields: [redemptionId], references: [id])
+
+  @@map("rewards_ledger_entries")
+}
+
+model PartnerMerchant {
+  id                   String @id @default(uuid()) @db.Uuid
+  name                 String @db.VarChar(255)
+  slug                 String @unique @db.VarChar(64)
+  status               String @db.VarChar(32)
+  settlementConfigJson Json   @default("{}") @map("settlement_config_json")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  redemptions Redemption[]
+
+  @@map("partner_merchants")
+}
+
+model Redemption {
+  id                String           @id @default(uuid()) @db.Uuid
+  rewardsAccountId  String           @map("rewards_account_id") @db.Uuid
+  partnerMerchantId String           @map("partner_merchant_id") @db.Uuid
+  offerId           String           @map("offer_id") @db.Uuid
+  pointsSpent       Int              @map("points_spent")
+  voucherCodeHash   String           @map("voucher_code_hash") @db.Char(64)
+  status            RedemptionStatus
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  rewardsAccount  RewardsAccount       @relation(fields: [rewardsAccountId], references: [id])
+  partnerMerchant PartnerMerchant      @relation(fields: [partnerMerchantId], references: [id])
+  ledgerEntries   RewardsLedgerEntry[]
+
+  @@map("redemptions")
+}
+
+// --- Service signals ---
+
+model ServiceSignal {
+  id                    String              @id @default(uuid()) @db.Uuid
+  tableId               String              @map("table_id") @db.Uuid
+  guestDeviceId         String              @map("guest_device_id") @db.Uuid
+  signalType            ServiceSignalType   @map("signal_type")
+  status                ServiceSignalStatus
+  cooldownUntil         DateTime?           @map("cooldown_until") @db.Timestamptz(6)
+  acknowledgedByStaffId String?             @map("acknowledged_by_staff_id") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  table               Table        @relation(fields: [tableId], references: [id])
+  guestDevice         GuestDevice  @relation(fields: [guestDeviceId], references: [id])
+  acknowledgedByStaff StaffMember? @relation("AcknowledgedByStaff", fields: [acknowledgedByStaffId], references: [id])
+
+  @@map("service_signals")
+}
+
+// --- Audit, webhooks, ops ---
+
+model AuditLogEntry {
+  id            String         @id @default(uuid()) @db.Uuid
+  restaurantId  String?        @map("restaurant_id") @db.Uuid
+  occurredAt    DateTime       @map("occurred_at") @db.Timestamptz(6)
+  actorType     AuditActorType @map("actor_type")
+  actorId       String?        @map("actor_id") @db.Uuid
+  action        String         @db.VarChar(64)
+  resourceType  String         @map("resource_type") @db.VarChar(64)
+  resourceId    String         @map("resource_id") @db.Uuid
+  correlationId String?        @map("correlation_id") @db.Uuid
+  payloadJson   Json           @default("{}") @map("payload_json")
+  ipHash        String?        @map("ip_hash") @db.Char(64)
+
+  restaurant  Restaurant?  @relation(fields: [restaurantId], references: [id])
+  staffMember StaffMember? @relation(fields: [actorId], references: [id])
+
+  @@map("audit_log_entries")
+}
+
+model WebhookEvent {
+  id               String                  @id @default(uuid()) @db.Uuid
+  source           WebhookSource
+  externalId       String                  @map("external_id") @db.VarChar(128)
+  idempotencyKey   String                  @unique @map("idempotency_key") @db.VarChar(256)
+  payloadJson      Json                    @map("payload_json")
+  signatureValid   Boolean?                @map("signature_valid")
+  processingStatus WebhookProcessingStatus @map("processing_status")
+  processedAt      DateTime?               @map("processed_at") @db.Timestamptz(6)
+  errorMessage     String?                 @map("error_message")
+  receivedAt       DateTime                @map("received_at") @db.Timestamptz(6)
+
+  @@map("webhook_events")
+}
+
+model Dispute {
+  id                 String        @id @default(uuid()) @db.Uuid
+  paymentId          String        @map("payment_id") @db.Uuid
+  restaurantId       String        @map("restaurant_id") @db.Uuid
+  disputeType        DisputeType   @map("dispute_type")
+  status             DisputeStatus
+  mollieChargebackId String?       @map("mollie_chargeback_id") @db.VarChar(32)
+  amountCents        Int           @map("amount_cents")
+  assignedOpsUserId  String?       @map("assigned_ops_user_id") @db.Uuid
+  resolutionNotes    String?       @map("resolution_notes")
+  openedAt           DateTime      @map("opened_at") @db.Timestamptz(6)
+  closedAt           DateTime?     @map("closed_at") @db.Timestamptz(6)
+
+  payment    Payment    @relation(fields: [paymentId], references: [id])
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@map("disputes")
+}
+
+model Incident {
+  id           String           @id @default(uuid()) @db.Uuid
+  severity     IncidentSeverity
+  title        String           @db.VarChar(255)
+  description  String
+  restaurantId String?          @map("restaurant_id") @db.Uuid
+  status       IncidentStatus
+  startedAt    DateTime         @map("started_at") @db.Timestamptz(6)
+  resolvedAt   DateTime?        @map("resolved_at") @db.Timestamptz(6)
+
+  restaurant Restaurant? @relation(fields: [restaurantId], references: [id])
+
+  @@map("incidents")
+}
+
+model BillStateEvent {
+  id           String              @id @default(uuid()) @db.Uuid
+  billId       String              @map("bill_id") @db.Uuid
+  fromState    BillSettlementState @map("from_state")
+  toState      BillSettlementState @map("to_state")
+  trigger      String              @db.VarChar(64)
+  actorStaffId String?             @map("actor_staff_id") @db.Uuid
+  occurredAt   DateTime            @map("occurred_at") @db.Timestamptz(6)
+  metadataJson Json                @default("{}") @map("metadata_json")
+
+  bill Bill @relation(fields: [billId], references: [id])
+
+  @@map("bill_state_events")
+}

@@ -1,0 +1,25 @@
+%% Flow A & B — Empty-table QR scan and service signal
+flowchart TD
+    START([Guest scans table QR]) --> RESOLVE{Resolve table URL}
+    RESOLVE -->|invalid| ERR_QR[Show QR_INVALID]
+    RESOLVE -->|valid| CHECK_STATE{Table state?}
+
+    CHECK_STATE -->|IDLE or DINING no payment| MENU[Flow A: Menu + table context]
+    CHECK_STATE -->|PAYMENT_OPEN| JOIN[Flow D: Join gate — token/PIN required]
+    CHECK_STATE -->|CLOSED| RESET_MSG[Show idle menu after reset]
+
+    MENU --> BROWSE[Browse menu read-only]
+    MENU --> CALL{Tap Call server / Ready to order}
+
+    CALL --> RATE{Rate limit OK?}
+    RATE -->|no| COOLDOWN[Show SIGNAL_RATE_LIMITED + countdown]
+    RATE -->|yes| POST[POST service-signal]
+    POST -->|fail| RETRY[Show SIGNAL_FAILED + retry]
+    POST -->|ok| EMIT[Emit service_signal.created]
+    EMIT --> WS[Push to staff WebSocket queue]
+    EMIT --> CONFIRM[Guest: Server notified]
+    WS --> ACK[Flow O: Waiter acknowledges]
+
+    style ERR_QR fill:#f66,color:#fff
+    style JOIN fill:#9cf
+    style CONFIRM fill:#6f6

@@ -1,0 +1,30 @@
+%% Flow F & G — Equal split and custom amount
+flowchart TD
+    START([Participant in payment lobby]) --> MODE{Choose split mode}
+
+    MODE -->|Equal| F1[Select participant subset]
+    F1 --> F2[Preview: pool ÷ N with cent rounding]
+    F2 --> F3{Confirm equal split?}
+    F3 -->|no| START
+    F3 -->|yes| FE[Emit split.equal.created]
+
+    MODE -->|Custom| G1[Enter amount €]
+    G1 --> G2{€0.50 ≤ amount ≤ remaining?}
+    G2 -->|no min| MIN[CUSTOM_BELOW_MINIMUM]
+    G2 -->|no max| CAP[Cap to remaining CUSTOM_EXCEEDS_REMAINING]
+    G2 -->|ok| G3[Preview: pays toward shared pool]
+    G3 --> GE[Emit split.custom.intent_created]
+
+    MODE -->|Claimed items| E1[Use Flow E totals]
+    E1 --> CHECKOUT
+
+    FE --> CHECKOUT[Flow I: Tip → Checkout]
+    GE --> CHECKOUT
+    CAP --> CHECKOUT
+
+    subgraph Rounding["Equal split example"]
+        R1["Remainder €18.00 ÷ 4 = €4.50 each"]
+    end
+
+    style MIN fill:#f66
+    style CHECKOUT fill:#9cf

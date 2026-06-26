@@ -1,0 +1,21 @@
+{
+  "name": "@rekentafel/msw-mock",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx mock-server.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@rekentafel/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@rekentafel/config": "workspace:*",
+    "@types/node": "^22.15.32",
+    "eslint": "^9.29.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

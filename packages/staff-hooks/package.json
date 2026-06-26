@@ -1,0 +1,28 @@
+{
+  "name": "@rekentafel/staff-hooks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@rekentafel/contracts": "workspace:*",
+    "@tanstack/react-query": "^5.81.5"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@rekentafel/config": "workspace:*",
+    "@types/react": "^19.1.8",
+    "eslint": "^9.29.0",
+    "react": "^19.1.0",
+    "typescript": "^5.8.3"
+  }
+}

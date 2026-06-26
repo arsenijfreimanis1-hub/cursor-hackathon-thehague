@@ -1,0 +1,76 @@
+:root {
+  --rt-bg: #0f1419;
+  --rt-surface: #1a2332;
+  --rt-text: #f4f7fb;
+  --rt-muted: #9aa8bc;
+  --rt-accent: #3d9eff;
+  --rt-accent-hover: #2b8aef;
+  --rt-border: #2a3548;
+  --rt-radius: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--rt-bg);
+  color: var(--rt-text);
+}
+
+.rt-btn {
+  border: none;
+  border-radius: var(--rt-radius);
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rt-btn--primary {
+  background: var(--rt-accent);
+  color: #fff;
+}
+
+.rt-btn--primary:hover:not(:disabled) {
+  background: var(--rt-accent-hover);
+}
+
+.rt-btn--secondary {
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 1px solid var(--rt-border);
+}
+
+.rt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rt-card {
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-radius);
+  padding: 1rem 1.25rem;
+}
+
+.rt-card__title {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.rt-qr {
+  text-align: center;
+}
+
+.rt-qr__label {
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.rt-qr__url {
+  font-size: 0.75rem;
+  color: var(--rt-muted);
+  word-break: break-all;
+}

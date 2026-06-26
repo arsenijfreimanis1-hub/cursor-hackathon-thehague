@@ -1,0 +1,38 @@
+%% Flow N & O — Restaurant onboarding and staff daily ops
+flowchart TB
+    subgraph N["Flow N — Onboarding"]
+        N0[Ops / signup] --> N1[KYC + contract]
+        N1 --> N2[Mollie Connect OAuth]
+        N2 --> N3[Tables + QR PDF export]
+        N3 --> N4[Menu import]
+        N4 --> N5[Staff invites + roles]
+        N5 --> N6{Test mode passes?}
+        N6 -->|yes| LIVE[restaurant.activated]
+        N6 -->|no| FIX[Fix VAT/menu/Mollie]
+    end
+
+    subgraph O["Flow O — Daily ops loop"]
+        O1[Waiter login] --> O2[Floor dashboard]
+        O2 --> O3[Service signals queue Flow B]
+        O2 --> O4[Start dining + enter bill Flow C]
+        O4 --> O5[Open payment + PIN]
+        O5 --> O6[Monitor claims + payments Flow E-J]
+        O6 --> REMAIN{Remaining €0?}
+        REMAIN -->|no| NUDGE[Alert unpaid guests]
+        NUDGE --> O6
+        REMAIN -->|yes| CLOSE[table.closed]
+        CLOSE --> RESET[table.reset → IDLE]
+    end
+
+    LIVE --> O1
+
+    subgraph Overrides["Manager overrides"]
+        OV1[claim.admin_override]
+        OV2[Manager PIN force close]
+        OV3[external_payment if Mollie down]
+    end
+
+    O6 --> Overrides
+
+    style LIVE fill:#6f6
+    style RESET fill:#9cf

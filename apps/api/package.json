@@ -1,0 +1,31 @@
+{
+  "name": "@rekentafel/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "@rekentafel/contracts": "workspace:*",
+    "@rekentafel/db": "workspace:*",
+    "@rekentafel/payments": "workspace:*",
+    "@rekentafel/realtime": "workspace:*",
+    "@rekentafel/shared-types": "workspace:*",
+    "@rekentafel/split-engine": "workspace:*",
+    "fastify": "^5.4.0",
+    "jose": "^6.0.11"
+  },
+  "devDependencies": {
+    "@rekentafel/config": "workspace:*",
+    "@types/node": "^22.15.32",
+    "eslint": "^9.29.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

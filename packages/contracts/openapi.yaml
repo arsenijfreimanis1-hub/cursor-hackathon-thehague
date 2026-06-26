@@ -1,0 +1,1634 @@
+openapi: 3.1.0
+info:
+  title: Rekentafel API
+  version: 1.0.0
+  description: |
+    Netherlands-first table QR split-pay platform API (MVP).
+    Money fields are integer cents (EUR). Timestamps ISO-8601 UTC.
+    Cross-ref entity dictionary: Bill, BillLine, AllocatableUnit, Participant,
+    Allocation, CheckoutIntent, Payment, PaymentSession, DiningSession.
+  contact:
+    name: Rekentafel Engineering
+
+servers:
+  - url: https://api.rekentafel.nl/v1
+    description: Production
+  - url: http://localhost:3000/v1
+    description: Local development
+
+tags:
+  - name: Guest — QR & Menu
+  - name: Guest — Service Signals
+  - name: Guest — Payment Session
+  - name: Guest — Claims & Splits
+  - name: Guest — Checkout
+  - name: Staff — Auth
+  - name: Staff — Tables & Sessions
+  - name: Staff — Bills
+  - name: Staff — Overrides
+  - name: Admin — Restaurant
+  - name: Webhooks
+  - name: Health
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /t/{restaurant_slug}/{table_code}:
+    get:
+      tags: [Guest — QR & Menu]
+      summary: Resolve table QR — empty-table menu and context
+      operationId: resolveTableQr
+      parameters:
+        - $ref: "#/components/parameters/RestaurantSlug"
+        - $ref: "#/components/parameters/TableCode"
+      responses:
+        "200":
+          description: Table context and menu (no bill unless payment active + token)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TableLandingResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tables/{table_id}/service-signals:
+    post:
+      tags: [Guest — Service Signals]
+      summary: Call server / ready to order
+      operationId: createServiceSignal
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceSignalRequest"
+      responses:
+        "201":
+          description: Signal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceSignal"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /payment-sessions/join:
+    post:
+      tags: [Guest — Payment Session]
+      summary: Join payment session with token or PIN
+      operationId: joinPaymentSession
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyOptional"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinPaymentSessionRequest"
+      responses:
+        "200":
+          description: Joined — returns participant credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinPaymentSessionResponse"
+        "401":
+          $ref: "#/components/responses/InvalidToken"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /payment-sessions/{payment_session_id}:
+    get:
+      tags: [Guest — Payment Session]
+      summary: Get payment session state, bill summary, participants
+      operationId: getPaymentSession
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+      responses:
+        "200":
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentSessionDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /payment-sessions/{payment_session_id}/events:
+    get:
+      tags: [Guest — Payment Session]
+      summary: SSE stream for bill, claim, and payment updates
+      operationId: subscribePaymentSessionEvents
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - name: Last-Event-ID
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /payment-sessions/{payment_session_id}/claims:
+    get:
+      tags: [Guest — Claims & Splits]
+      summary: List allocations for session
+      operationId: listClaims
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+      responses:
+        "200":
+          description: Allocations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bill_version:
+                    type: integer
+                  allocations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Allocation"
+                  unclaimed_cents:
+                    type: integer
+                  remaining_cents:
+                    type: integer
+    post:
+      tags: [Guest — Claims & Splits]
+      summary: Create item or shared claim
+      operationId: createClaim
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatchBillVersion"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClaimRequest"
+      responses:
+        "201":
+          description: Claim created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocation"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "423":
+          $ref: "#/components/responses/Locked"
+
+  /payment-sessions/{payment_session_id}/claims/{allocation_id}:
+    patch:
+      tags: [Guest — Claims & Splits]
+      summary: Update shared claim fraction
+      operationId: updateClaim
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/AllocationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatchBillVersion"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClaimRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocation"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Guest — Claims & Splits]
+      summary: Release claim
+      operationId: deleteClaim
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/AllocationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Released
+        "423":
+          $ref: "#/components/responses/Locked"
+
+  /payment-sessions/{payment_session_id}/splits/equal:
+    post:
+      tags: [Guest — Claims & Splits]
+      summary: Equal split among selected participants
+      operationId: createEqualSplit
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatchBillVersion"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EqualSplitRequest"
+      responses:
+        "201":
+          description: Equal split allocations created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EqualSplitResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "423":
+          $ref: "#/components/responses/Locked"
+
+  /payment-sessions/{payment_session_id}/splits/custom:
+    post:
+      tags: [Guest — Claims & Splits]
+      summary: Custom fixed-amount pledge toward remaining balance
+      operationId: createCustomSplit
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomSplitRequest"
+      responses:
+        "201":
+          description: Custom pledge created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocation"
+
+  /payment-sessions/{payment_session_id}/splits/calculate:
+    post:
+      tags: [Guest — Claims & Splits]
+      summary: Preview split calculation without persisting
+      operationId: calculateSplit
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SplitCalculateRequest"
+      responses:
+        "200":
+          description: Calculation preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SplitCalculateResponse"
+
+  /payment-sessions/{payment_session_id}/tips:
+    post:
+      tags: [Guest — Checkout]
+      summary: Set tip before checkout (or included in checkout)
+      operationId: setTip
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetTipRequest"
+      responses:
+        "200":
+          description: Tip recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TipSelection"
+
+  /payment-sessions/{payment_session_id}/checkout:
+    post:
+      tags: [Guest — Checkout]
+      summary: Initiate Mollie checkout for participant
+      operationId: initiateCheckout
+      security:
+        - PaymentParticipantAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatchBillVersion"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutRequest"
+      responses:
+        "201":
+          description: Checkout created — redirect to Mollie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+        "409":
+          description: Stale bill version or allocation conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "423":
+          $ref: "#/components/responses/Locked"
+
+  /checkout/{checkout_id}/status:
+    get:
+      tags: [Guest — Checkout]
+      summary: Poll checkout status after Mollie redirect
+      operationId: getCheckoutStatus
+      security:
+        - GuestAuth: []
+      parameters:
+        - name: checkout_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current payment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutStatus"
+
+  /staff/auth/login:
+    post:
+      tags: [Staff — Auth]
+      summary: Staff login
+      operationId: staffLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        "200":
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAuthResponse"
+
+  /staff/tables:
+    get:
+      tags: [Staff — Tables & Sessions]
+      summary: List tables with session state
+      operationId: listStaffTables
+      security:
+        - StaffAuth: []
+      responses:
+        "200":
+          description: Table list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffTableSummary"
+
+  /staff/tables/{table_id}/dining-sessions:
+    post:
+      tags: [Staff — Tables & Sessions]
+      summary: Start dining session (Flow C)
+      operationId: startDiningSession
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                party_size:
+                  type: integer
+                  minimum: 1
+                  maximum: 99
+      responses:
+        "201":
+          description: Dining session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiningSession"
+
+  /staff/tables/{table_id}/dining-sessions/{dining_session_id}:
+    delete:
+      tags: [Staff — Tables & Sessions]
+      summary: Cancel dining session before payment
+      operationId: cancelDiningSession
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - name: dining_session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Cancelled
+
+  /staff/tables/{table_id}/bills:
+    post:
+      tags: [Staff — Bills]
+      summary: Create or replace draft bill (manual entry)
+      operationId: createBill
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBillRequest"
+      responses:
+        "201":
+          description: Bill created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+    get:
+      tags: [Staff — Bills]
+      summary: Get current bill for table
+      operationId: getBill
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      responses:
+        "200":
+          description: Bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  /staff/tables/{table_id}/bills/import:
+    post:
+      tags: [Staff — Bills]
+      summary: Import bill from CSV
+      operationId: importBill
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Bill imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  /staff/tables/{table_id}/payment-sessions:
+    post:
+      tags: [Staff — Tables & Sessions]
+      summary: Activate payment mode — issue PaymentSessionToken
+      operationId: activatePaymentMode
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttl_seconds:
+                  type: integer
+                  default: 7200
+                  description: Default 2 hours
+      responses:
+        "201":
+          description: Payment session opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivatePaymentResponse"
+
+  /staff/payment-sessions/{payment_session_id}/refresh:
+    post:
+      tags: [Staff — Tables & Sessions]
+      summary: Refresh payment token TTL and optionally rotate PIN
+      operationId: refreshPaymentSession
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivatePaymentResponse"
+
+  /staff/payment-sessions/{payment_session_id}/revoke:
+    post:
+      tags: [Staff — Tables & Sessions]
+      summary: Revoke payment session (no successful payments)
+      operationId: revokePaymentSession
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Revoked
+
+  /staff/payment-sessions/{payment_session_id}/lock-claims:
+    post:
+      tags: [Staff — Overrides]
+      summary: Freeze guest claims (ALLOCATION_FROZEN)
+      operationId: lockClaims
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Claims frozen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillSettlement"
+
+  /staff/payment-sessions/{payment_session_id}/unlock-claims:
+    post:
+      tags: [Staff — Overrides]
+      summary: Unfreeze guest claims
+      operationId: unlockClaims
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Claims open
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillSettlement"
+
+  /staff/payment-sessions/{payment_session_id}/overrides:
+    post:
+      tags: [Staff — Overrides]
+      summary: Waiter/manager override — reassign, clear, force equal
+      operationId: staffOverride
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaymentSessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: X-Manager-PIN
+          in: header
+          schema:
+            type: string
+          description: Required for force_close, void, large refund
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffOverrideRequest"
+      responses:
+        "200":
+          description: Override applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverrideResult"
+
+  /staff/tables/{table_id}/close:
+    post:
+      tags: [Staff — Tables & Sessions]
+      summary: Close table — end session and reset
+      operationId: closeTable
+      security:
+        - StaffAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: X-Manager-PIN
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloseTableRequest"
+      responses:
+        "200":
+          description: Table closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CloseTableResponse"
+
+  /staff/service-signals:
+    get:
+      tags: [Staff — Tables & Sessions]
+      summary: Inbox of pending service signals
+      operationId: listServiceSignals
+      security:
+        - StaffAuth: []
+      responses:
+        "200":
+          description: Signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceSignal"
+
+  /staff/service-signals/{signal_id}/ack:
+    post:
+      tags: [Staff — Tables & Sessions]
+      summary: Acknowledge service signal
+      operationId: ackServiceSignal
+      security:
+        - StaffAuth: []
+      parameters:
+        - name: signal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Acknowledged
+
+  /webhooks/mollie:
+    post:
+      tags: [Webhooks]
+      summary: Mollie payment status webhook ingress
+      operationId: mollieWebhook
+      description: |
+        Returns 200 within 500ms. Processing is async.
+        Verification via fetch payment API — not redirect URL.
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Mollie payment id e.g. tr_xxx
+      responses:
+        "200":
+          description: Accepted for processing
+
+  /admin/restaurants/{restaurant_id}/tables:
+    get:
+      tags: [Admin — Restaurant]
+      summary: List configured tables
+      operationId: adminListTables
+      security:
+        - StaffAuth: []
+      parameters:
+        - name: restaurant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Tables
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Table"
+
+components:
+  securitySchemes:
+    GuestAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Guest device session JWT (typ=guest)
+    PaymentParticipantAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Payment participant JWT (typ=payment_participant)
+    StaffAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Staff JWT with restaurant_id and role
+
+  parameters:
+    RestaurantSlug:
+      name: restaurant_slug
+      in: path
+      required: true
+      schema:
+        type: string
+        example: de-rekentafel
+    TableCode:
+      name: table_code
+      in: path
+      required: true
+      schema:
+        type: string
+        example: T12
+    TableId:
+      name: table_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PaymentSessionId:
+      name: payment_session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AllocationId:
+      name: allocation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKeyOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+    IfMatchBillVersion:
+      name: If-Match
+      in: header
+      description: 'Format bill_version:N e.g. bill_version:12'
+      schema:
+        type: string
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: Invalid or expired token
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    InvalidToken:
+      description: Invalid payment session token or PIN
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Concurrent modification or unit unavailable
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unprocessable:
+      description: Validation error
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Locked:
+      description: Resource locked — claims frozen or checkout in progress
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          example: https://api.rekentafel.nl/errors/unit-unavailable
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+          enum:
+            - UNIT_UNAVAILABLE
+            - UNIT_LOCKED
+            - BILL_VERSION_STALE
+            - CLAIMS_FROZEN
+            - CHECKOUT_IN_PROGRESS
+            - SHARE_OVERFLOW
+            - PLEDGE_EXCEEDS_REMAINING
+            - IDEMPOTENCY_KEY_REUSED
+            - PIN_LOCKED
+        retry_after_ms:
+          type: integer
+
+    MoneyCents:
+      type: integer
+      minimum: 0
+      description: EUR cents
+      example: 1450
+
+    TableSessionState:
+      type: string
+      enum: [EMPTY, SEATED, PAYMENT_ACTIVE, CLOSED]
+
+    TableBillSettlementState:
+      type: string
+      enum:
+        - BILL_DRAFT
+        - ALLOCATION_OPEN
+        - ALLOCATION_FROZEN
+        - CHECKOUT_IN_PROGRESS
+        - PARTIALLY_PAID
+        - FULLY_PAID
+        - CLOSED
+        - VOID
+
+    SplitMode:
+      type: string
+      enum: [ITEM, EQUAL, CUSTOM, SHARED]
+
+    ParticipantState:
+      type: string
+      enum:
+        - JOINED
+        - ALLOCATING
+        - CHECKOUT_LOCKED
+        - PAYMENT_PENDING
+        - PAID
+        - PAYMENT_FAILED
+        - RELEASED
+        - OVERRIDDEN
+
+    PaymentStatus:
+      type: string
+      enum:
+        - CREATING
+        - MOLLIE_OPEN
+        - PAID
+        - FAILED
+        - CANCELED
+        - EXPIRED
+        - PARTIALLY_REFUNDED
+        - REFUNDED
+        - CHARGEBACK
+
+    Table:
+      type: object
+      required: [table_id, restaurant_id, table_code, session_state]
+      properties:
+        table_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        table_code:
+          type: string
+          example: T12
+        session_state:
+          $ref: "#/components/schemas/TableSessionState"
+        qr_url:
+          type: string
+          format: uri
+
+    TableLandingResponse:
+      type: object
+      required: [table, restaurant, session_state, menu]
+      properties:
+        table:
+          $ref: "#/components/schemas/Table"
+        restaurant:
+          type: object
+          properties:
+            restaurant_id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            slug:
+              type: string
+        session_state:
+          $ref: "#/components/schemas/TableSessionState"
+        payment_session_hint:
+          type: object
+          nullable: true
+          description: Present only if PAYMENT_ACTIVE — no bill without join
+          properties:
+            payment_session_id:
+              type: string
+              format: uuid
+            join_required:
+              type: boolean
+              example: true
+        menu:
+          $ref: "#/components/schemas/Menu"
+
+    Menu:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              category_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              items:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MenuItem"
+
+    MenuItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        price_inc_vat_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        vat_rate_bps:
+          type: integer
+          description: 900 = 9%, 2100 = 21%
+        allergens:
+          type: array
+          items:
+            type: string
+
+    CreateServiceSignalRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [ready_to_order, assistance]
+
+    ServiceSignal:
+      type: object
+      properties:
+        signal_id:
+          type: string
+          format: uuid
+        table_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        status:
+          type: string
+          enum: [pending, acknowledged, expired]
+        cooldown_until:
+          type: string
+          format: date-time
+
+    DiningSession:
+      type: object
+      properties:
+        dining_session_id:
+          type: string
+          format: uuid
+        table_id:
+          type: string
+          format: uuid
+        waiter_id:
+          type: string
+          format: uuid
+        party_size:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+
+    Bill:
+      type: object
+      required: [bill_id, bill_version, lines, bill_grand_total_cents]
+      properties:
+        bill_id:
+          type: string
+          format: uuid
+        dining_session_id:
+          type: string
+          format: uuid
+        bill_version:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+          enum: [EUR]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillLine"
+        bill_grand_total_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        service_charge_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        settlement:
+          $ref: "#/components/schemas/BillSettlement"
+
+    BillLine:
+      type: object
+      required: [line_id, kind, name, qty, unit_price_inc_vat_cents, vat_rate_bps, line_total_inc_vat_cents]
+      properties:
+        line_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [MENU_ITEM, SERVICE_CHARGE, DISCOUNT, ROUNDING_ADJ, MANUAL_MISC]
+        name:
+          type: string
+        qty:
+          type: integer
+          minimum: 1
+        unit_price_inc_vat_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        vat_rate_bps:
+          type: integer
+        line_total_inc_vat_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        splittable:
+          type: boolean
+          description: true for shared bottle/platter lines
+
+    BillSettlement:
+      type: object
+      properties:
+        state:
+          $ref: "#/components/schemas/TableBillSettlementState"
+        bill_grand_total_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        confirmed_paid_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        remaining_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        unclaimed_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        allocated_cents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    AllocatableUnit:
+      type: object
+      properties:
+        unit_id:
+          type: string
+          format: uuid
+        line_id:
+          type: string
+          format: uuid
+        unit_index:
+          type: integer
+        amount_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        max_shares:
+          type: integer
+          description: 1 for discrete items; up to 20 for shared
+
+    CreateBillRequest:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          items:
+            type: object
+            required: [name, qty, unit_price_inc_vat_cents, vat_rate_bps]
+            properties:
+              name:
+                type: string
+              qty:
+                type: integer
+              unit_price_inc_vat_cents:
+                $ref: "#/components/schemas/MoneyCents"
+              vat_rate_bps:
+                type: integer
+              splittable:
+                type: boolean
+        apply_service_charge:
+          type: boolean
+          default: true
+
+    ActivatePaymentResponse:
+      type: object
+      required: [payment_session_id, join_pin, token, expires_at, bill]
+      properties:
+        payment_session_id:
+          type: string
+          format: uuid
+        join_pin:
+          type: string
+          pattern: "^[0-9]{6}$"
+          example: "482917"
+        token:
+          type: string
+          description: Raw PaymentSessionToken — show once in staff UI
+        join_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        bill:
+          $ref: "#/components/schemas/Bill"
+
+    JoinPaymentSessionRequest:
+      type: object
+      required: [payment_session_id, token, token_type, display_name]
+      properties:
+        payment_session_id:
+          type: string
+          format: uuid
+        token:
+          type: string
+          description: Raw secret token or 6-digit join_pin
+        token_type:
+          type: string
+          enum: [secret, pin]
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 32
+
+    JoinPaymentSessionResponse:
+      type: object
+      required: [participant_id, participant_token, payment_session]
+      properties:
+        participant_id:
+          type: string
+          format: uuid
+        participant_token:
+          type: string
+          description: JWT for payment_participant auth
+        payment_session:
+          $ref: "#/components/schemas/PaymentSessionDetail"
+
+    PaymentSessionDetail:
+      type: object
+      properties:
+        payment_session_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        table_id:
+          type: string
+          format: uuid
+        bill_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [OPEN, CLOSED, EXPIRED]
+        expires_at:
+          type: string
+          format: date-time
+        bill:
+          $ref: "#/components/schemas/Bill"
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/Participant"
+        settlement:
+          $ref: "#/components/schemas/BillSettlement"
+
+    Participant:
+      type: object
+      properties:
+        participant_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        state:
+          $ref: "#/components/schemas/ParticipantState"
+        allocated_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        paid_cents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    Allocation:
+      type: object
+      required: [allocation_id, participant_id, split_mode, amount_cents, bill_version]
+      properties:
+        allocation_id:
+          type: string
+          format: uuid
+        participant_id:
+          type: string
+          format: uuid
+        unit_id:
+          type: string
+          format: uuid
+        split_mode:
+          $ref: "#/components/schemas/SplitMode"
+        share_numerator:
+          type: integer
+        share_denominator:
+          type: integer
+        amount_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        bill_version:
+          type: integer
+        equal_group_id:
+          type: string
+          format: uuid
+
+    CreateClaimRequest:
+      type: object
+      required: [split_mode]
+      properties:
+        split_mode:
+          type: string
+          enum: [ITEM, SHARED]
+        unit_id:
+          type: string
+          format: uuid
+        share_numerator:
+          type: integer
+        share_denominator:
+          type: integer
+          maximum: 20
+
+    UpdateClaimRequest:
+      type: object
+      properties:
+        share_numerator:
+          type: integer
+        share_denominator:
+          type: integer
+
+    EqualSplitRequest:
+      type: object
+      required: [participant_ids]
+      properties:
+        participant_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 2
+        target:
+          type: string
+          enum: [remaining, unclaimed]
+          default: remaining
+
+    EqualSplitResponse:
+      type: object
+      properties:
+        equal_group_id:
+          type: string
+          format: uuid
+        allocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Allocation"
+
+    CustomSplitRequest:
+      type: object
+      required: [amount_cents]
+      properties:
+        amount_cents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    SplitCalculateRequest:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          $ref: "#/components/schemas/SplitMode"
+        participant_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        unit_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        custom_amount_cents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    SplitCalculateResponse:
+      type: object
+      properties:
+        per_participant:
+          type: array
+          items:
+            type: object
+            properties:
+              participant_id:
+                type: string
+                format: uuid
+              food_cents:
+                $ref: "#/components/schemas/MoneyCents"
+              service_charge_cents:
+                $ref: "#/components/schemas/MoneyCents"
+              total_cents:
+                $ref: "#/components/schemas/MoneyCents"
+        bill_version:
+          type: integer
+
+    SetTipRequest:
+      type: object
+      properties:
+        tip_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        tip_percent_bps:
+          type: integer
+          description: Optional e.g. 1000 = 10%
+
+    TipSelection:
+      type: object
+      properties:
+        tip_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        basis_cents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    CheckoutRequest:
+      type: object
+      properties:
+        checkout_mode:
+          type: string
+          enum: [INDIVIDUAL, COMBINED]
+          default: COMBINED
+          description: COMBINED settles remaining bill in one Mollie payment (MVP default)
+        tip_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        redirect_url:
+          type: string
+          format: uri
+          description: Override default return URL
+
+    CheckoutResponse:
+      type: object
+      required: [checkout_id, mollie_checkout_url, total_cents, expires_at]
+      properties:
+        checkout_id:
+          type: string
+          format: uuid
+        mollie_payment_id:
+          type: string
+          example: tr_abc123
+        mollie_checkout_url:
+          type: string
+          format: uri
+        food_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        tip_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        total_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        expires_at:
+          type: string
+          format: date-time
+
+    CheckoutStatus:
+      type: object
+      properties:
+        checkout_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/PaymentStatus"
+        total_cents:
+          $ref: "#/components/schemas/MoneyCents"
+        remaining_table_cents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    StaffTableSummary:
+      type: object
+      properties:
+        table:
+          $ref: "#/components/schemas/Table"
+        dining_session:
+          $ref: "#/components/schemas/DiningSession"
+        payment_session_id:
+          type: string
+          format: uuid
+        settlement:
+          $ref: "#/components/schemas/BillSettlement"
+        pending_signals:
+          type: integer
+
+    StaffOverrideRequest:
+      type: object
+      required: [action, reason_code]
+      properties:
+        action:
+          type: string
+          enum:
+            - REASSIGN_UNIT
+            - CLEAR_PARTICIPANT
+            - FORCE_EQUAL_REMAINING
+            - BUMP_BILL_VERSION
+            - MARK_CASH_PAID
+        reason_code:
+          type: string
+        participant_id:
+          type: string
+          format: uuid
+        allocation_id:
+          type: string
+          format: uuid
+        target_participant_id:
+          type: string
+          format: uuid
+        cash_amount_cents:
+          $ref: "#/components/schemas/MoneyCents"
+
+    OverrideResult:
+      type: object
+      properties:
+        bill_version:
+          type: integer
+        settlement:
+          $ref: "#/components/schemas/BillSettlement"
+        affected_allocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Allocation"
+
+    CloseTableRequest:
+      type: object
+      required: [close_reason]
+      properties:
+        close_reason:
+          type: string
+          enum: [FULLY_PAID, FORCE_CLOSE, CASH_REMAINDER, EXTERNAL_POS, WALKOUT]
+        external_payment_note:
+          type: string
+
+    CloseTableResponse:
+      type: object
+      properties:
+        table_id:
+          type: string
+          format: uuid
+        session_state:
+          $ref: "#/components/schemas/TableSessionState"
+        audit_export_url:
+          type: string
+          format: uri
+          description: Signed URL valid 24h
+
+    StaffAuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+        staff_user_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [waiter, manager, restaurant_admin, platform_ops]

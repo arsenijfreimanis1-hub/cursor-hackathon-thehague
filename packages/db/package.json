@@ -1,0 +1,32 @@
+{
+  "name": "@rekentafel/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "typecheck": "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/rekentafel prisma validate && prisma generate && tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "db:generate": "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/rekentafel prisma generate",
+    "db:validate": "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/rekentafel prisma validate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.10.1"
+  },
+  "devDependencies": {
+    "@rekentafel/config": "workspace:*",
+    "@types/node": "^22.15.32",
+    "eslint": "^9.29.0",
+    "prisma": "^6.10.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

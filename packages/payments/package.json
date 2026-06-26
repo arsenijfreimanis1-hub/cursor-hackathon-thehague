@@ -1,0 +1,25 @@
+{
+  "name": "@rekentafel/payments",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@mollie/api-client": "^4.3.2",
+    "@rekentafel/shared-types": "workspace:*",
+    "@rekentafel/split-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@rekentafel/config": "workspace:*",
+    "@types/node": "^22.15.32",
+    "eslint": "^9.29.0",
+    "typescript": "^5.8.3"
+  }
+}

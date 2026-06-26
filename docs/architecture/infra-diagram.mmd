@@ -1,0 +1,114 @@
+%% PART 16 — MVP Runtime Infrastructure Diagram
+%% Product: Rekentafel / TabSettle (Netherlands-first table QR split-pay)
+%% Render: mermaid flowchart TB
+%% Cross-ref: docs/architecture/tech-stack.md
+
+flowchart TB
+    subgraph Clients["Client surfaces (mobile web)"]
+        GW["Guest PWA<br/>app.rekentafel.nl"]
+        SW["Staff web<br/>/staff"]
+        AW["Admin + ops web<br/>/admin · ops.rekentafel.nl"]
+    end
+
+    subgraph Edge["Edge layer"]
+        CF["Cloudflare<br/>DNS · WAF · TLS · static CDN"]
+    end
+
+    subgraph FlyAMS["Fly.io — ams region (EU)"]
+        subgraph APICluster["rekentafel-api (2 machines HA)"]
+            API["Fastify API<br/>REST · SSE · WebSocket"]
+            NOTIF["Notification gateway<br/>SSE fan-out · WS staff channel"]
+        end
+
+        subgraph WorkerCluster["rekentafel-worker"]
+            WRK["BullMQ workers<br/>webhook · notify · reconcile"]
+            SCH["Scheduler singleton<br/>cron · repeatable jobs"]
+        end
+
+        subgraph DataFly["Managed data (Fly or attached)"]
+            PG[("PostgreSQL 16<br/>source of truth · outbox")]
+            RD[("Redis 7<br/>locks · idempotency · BullMQ")]
+        end
+
+        MB["Metabase (optional pilot)<br/>EU self-hosted reporting"]
+    end
+
+    subgraph External["External services"]
+        MOLLIE["Mollie Payments API<br/>iDEAL · cards · wallets"]
+        MWH["Mollie webhooks<br/>POST id=tr_xxx"]
+        PM["Postmark<br/>receipt email (optional)"]
+        PH["PostHog EU<br/>product analytics"]
+        SENTRY["Sentry EU<br/>error tracking"]
+        GC["Grafana Cloud EU<br/>logs · metrics · traces"]
+    end
+
+    subgraph CryptoStub["Post-MVP — NOT in MVP runtime"]
+        CRYPTO501["crypto module stub<br/>501 NOT_MVP"]
+        CASP["Licensed crypto PSP<br/>deferred V2+"]
+    end
+
+    subgraph Restaurant["Pilot restaurant"]
+        MO["Restaurant Mollie org<br/>OAuth connected"]
+        IBAN["Restaurant IBAN<br/>T+1 iDEAL settlement"]
+        STAFF["Waiters · managers<br/>iPad / phone"]
+    end
+
+    %% Client → Edge → API
+    GW -->|HTTPS REST + SSE| CF
+    SW -->|HTTPS REST + WSS| CF
+    AW -->|HTTPS REST| CF
+    CF -->|/v1/* API routes| API
+    CF -->|static assets| GW
+    CF -->|static assets| SW
+    CF -->|static assets| AW
+
+    STAFF --> SW
+
+    %% API internal wiring
+    API --> NOTIF
+    API --> PG
+    API --> RD
+    API -->|enqueue jobs| RD
+    WRK --> RD
+    WRK --> PG
+    SCH --> RD
+    SCH --> PG
+
+    %% Realtime paths
+    GW -.->|SSE /payment-sessions/id/events| NOTIF
+    SW -.->|WSS /v1/ws/staff| NOTIF
+    NOTIF --> RD
+
+    %% Payments
+    API -->|OAuth create payment| MOLLIE
+    MOLLIE --> MO
+    MO -->|EUR payout| IBAN
+    MWH -->|webhook ingress| API
+    API -->|200 OK + queue| WRK
+    WRK -->|GET verify payment| MOLLIE
+    WRK -->|update ledger| PG
+
+    %% Crypto excluded
+    API -.->|feature flag OFF| CRYPTO501
+    CRYPTO501 -.->|post-MVP only| CASP
+
+    %% Observability + analytics
+    API -->|OTel · pino| GC
+    WRK -->|OTel · pino| GC
+    API -->|exceptions| SENTRY
+    GW -->|anonymous events| PH
+    API -->|optional receipt| PM
+    MB --> PG
+
+    %% Styling
+    classDef mvp fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    classDef edge fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    classDef data fill:#fff3e0,stroke:#ef6c00,color:#e65100
+    classDef external fill:#fce4ec,stroke:#c2185b,color:#880e4f
+    classDef deferred fill:#eeeeee,stroke:#9e9e9e,color:#616161,stroke-dasharray: 5 5
+
+    class GW,SW,AW,API,NOTIF,WRK,SCH,PG,RD mvp
+    class CF edge
+    class PG,RD data
+    class MOLLIE,MWH,PM,PH,SENTRY,GC,MO,IBAN external
+    class CRYPTO501,CASP deferred

@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true
+  },
+  "files": ["tsconfig.base.json", "tsconfig.node.json"]
+}

@@ -1,0 +1,102 @@
+.staff-layout {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.staff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.floor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.table-card__code {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.login-form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 360px;
+  margin: 4rem auto;
+}
+
+.login-form input {
+  padding: 0.75rem;
+  border-radius: var(--rt-radius);
+  border: 1px solid var(--rt-border);
+  background: var(--rt-bg);
+  color: var(--rt-text);
+}
+
+.table-card-btn {
+  all: unset;
+  cursor: pointer;
+  display: block;
+}
+
+.table-card-btn:hover {
+  opacity: 0.9;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.bill-lines {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+
+.bill-lines li {
+  padding: 0.25rem 0;
+}
+
+.activation-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--rt-border);
+  border-radius: var(--rt-radius);
+}
+
+.pin {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.signal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+input, select {
+  padding: 0.75rem;
+  border-radius: var(--rt-radius);
+  border: 1px solid var(--rt-border);
+  background: var(--rt-bg);
+  color: var(--rt-text);
+}

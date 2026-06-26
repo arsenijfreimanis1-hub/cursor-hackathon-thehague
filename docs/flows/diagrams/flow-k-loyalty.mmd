@@ -1,0 +1,30 @@
+%% Flow K — Loyalty accrual (MVP minimal)
+flowchart TD
+    PAY([payment.mollie.webhook.paid]) --> LINKED{Account linked?}
+
+    LINKED -->|no| PROMPT[Post-pay optional: Save points?]
+    PROMPT -->|skip| END1([No accrual])
+    PROMPT -->|email| MAGIC[Magic link verify]
+    MAGIC --> LINK[Emit account.linked]
+
+    LINKED -->|yes| ACCRUE
+    LINK --> ACCRUE[Calculate points on food base excl. tip]
+
+    ACCRUE --> EMIT[Emit loyalty.accrued]
+    EMIT --> ACCT[Account: points + visit history]
+
+    REFUND([payment.refund.completed]) --> REV[loyalty.reversed]
+    CLOSE([table.closed]) --> VISIT[loyalty.visit_recorded]
+
+    subgraph MVP["MVP scope"]
+        M1[Single-restaurant points only]
+        M2[No coalition redemption]
+    end
+
+    subgraph Deferred["POST-MVP"]
+        D1[Cross-venue coalition]
+        D2[Partner marketplace Flow M]
+    end
+
+    style END1 fill:#ccc
+    style EMIT fill:#6f6

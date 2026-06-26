@@ -1,0 +1,21 @@
+{
+  "name": "rekentafel",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "mock:server": "pnpm --filter @rekentafel/msw-mock dev",
+    "dev:api": "pnpm --filter @rekentafel/api dev",
+    "dev:guest": "pnpm --filter @rekentafel/guest-web dev",
+    "dev:staff": "pnpm --filter @rekentafel/staff-web dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  }
+}
