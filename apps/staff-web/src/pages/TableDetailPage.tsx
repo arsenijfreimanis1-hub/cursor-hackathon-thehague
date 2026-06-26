@@ -16,7 +16,6 @@ import {
   Card,
   Field,
   formatEuro,
-  PinDisplay,
   QrDisplay,
 } from "@rekentafel/ui-core";
 import { API_BASE } from "../config";
@@ -48,11 +47,7 @@ export function TableDetailPage({
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState("");
   const [vat, setVat] = useState<900 | 2100>(900);
-  const [activation, setActivation] = useState<{
-    join_pin: string;
-    payment_session_id: string;
-    guest_url: string;
-  } | null>(null);
+  const [activated, setActivated] = useState(false);
 
   const diningSessionId = table.dining_session?.dining_session_id;
   const currentState = (billData?.state as string | undefined) ?? sessionState;
@@ -70,7 +65,6 @@ export function TableDetailPage({
   const canAddLines = ["SEATED", "ORDERED", "READY_TO_PAY"].includes(currentState);
   const canActivate = currentState === "ORDERED" || currentState === "SEATED";
   const canClose = currentState === "PAID" || currentState === "READY_TO_PAY" || currentState === "ORDERED";
-  const activePin = table.join_pin ?? activation?.join_pin;
 
   const claimLabel = (claimedBy: string) =>
     claimedBy === "Vrij" ? t("split.free") : claimedBy;
@@ -276,25 +270,21 @@ export function TableDetailPage({
             <Button
               disabled={activate.isPending || (bill?.bill_grand_total_cents ?? 0) <= 0}
               onClick={() =>
-                activate.mutate({ tableId }, { onSuccess: (result) => setActivation(result) })
+                activate.mutate({ tableId }, { onSuccess: () => setActivated(true) })
               }
             >
               {t("staff.table.activate")}
             </Button>
-            {activation && (
-              <div className="activation-info">
-                <p className="muted" style={{ margin: "0 0 0.5rem" }}>
-                  {t("staff.table.sharePin")}
-                </p>
-                <PinDisplay pin={activation.join_pin} />
-              </div>
+            {activated && (
+              <p className="muted" style={{ marginTop: "0.75rem", textAlign: "center" }}>
+                {t("staff.table.guestsJoin")}
+              </p>
             )}
           </Card>
         )}
 
-        {(currentState === "READY_TO_PAY" || activePin) && (
+        {currentState === "READY_TO_PAY" && (
           <Card title={t("staff.table.liveTitle")} subtitle={t("staff.table.liveSubtitle")}>
-            {activePin && <PinDisplay pin={activePin} />}
             {bill?.confirmed_paid_cents ? (
               <p style={{ textAlign: "center", marginTop: "1rem" }}>
                 {t("staff.table.paidAmount")} <strong>{formatEuro(bill.confirmed_paid_cents)}</strong>

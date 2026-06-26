@@ -12,7 +12,6 @@ export function JoinPage() {
   const navigate = useNavigate();
   const join = useJoinSession(API_BASE);
   const [displayName, setDisplayName] = useState("");
-  const [joinPin, setJoinPin] = useState("");
 
   return (
     <PageShell
@@ -21,7 +20,7 @@ export function JoinPage() {
       headerExtra={<LanguageSwitcher />}
     >
       <Card className="join-card">
-        <div className="join-icon" aria-hidden>🔐</div>
+        <div className="join-icon" aria-hidden>👋</div>
         <form
           className="stack"
           onSubmit={(e) => {
@@ -29,7 +28,6 @@ export function JoinPage() {
             join.mutate(
               {
                 payment_session_id: paymentSessionId,
-                join_pin: joinPin,
                 display_name: displayName || "Gast",
               },
               {
@@ -47,21 +45,11 @@ export function JoinPage() {
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t("guest.join.namePlaceholder")}
               autoComplete="name"
-            />
-          </Field>
-          <Field label={t("guest.join.pin")}>
-            <input
-              className="rt-input rt-input--pin"
-              value={joinPin}
-              onChange={(e) => setJoinPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="••••••"
-              inputMode="numeric"
-              maxLength={6}
-              autoComplete="one-time-code"
+              autoFocus
             />
           </Field>
           {join.error && <p className="error">{join.error.message}</p>}
-          <Button type="submit" disabled={join.isPending || joinPin.length < 6}>
+          <Button type="submit" disabled={join.isPending}>
             {join.isPending ? t("guest.join.busy") : t("guest.join.submit")}
           </Button>
         </form>
