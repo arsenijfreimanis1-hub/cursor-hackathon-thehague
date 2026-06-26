@@ -43,7 +43,8 @@ export function FloorGrid({
       </header>
 
       {openSignals?.length ? (
-        <Card title="Service signalen" className="signals-inbox">
+        <div className="signals-inbox">
+          <Card title="Service signalen">
           {openSignals.map((s) => (
             <div key={s.signal_id} className="signal-row">
               <span>
@@ -54,7 +55,8 @@ export function FloorGrid({
               </Button>
             </div>
           ))}
-        </Card>
+          </Card>
+        </div>
       ) : null}
 
       {isLoading && <p>Laden…</p>}

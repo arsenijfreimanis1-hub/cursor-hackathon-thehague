@@ -205,7 +205,7 @@ export function TableDetailPage({
           </Card>
         )}
 
-        {canActivate && currentState !== "READY_TO_PAY" && (
+        {canActivate && (
           <Card title="Betaling activeren">
             <p className="muted">Gasten kunnen pas deelnemen na activatie.</p>
             <Button

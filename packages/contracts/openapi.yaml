@@ -965,7 +965,7 @@ components:
 
     TableSessionState:
       type: string
-      enum: [EMPTY, SEATED, PAYMENT_ACTIVE, CLOSED]
+      enum: [DORMANT, SEATED, ORDERED, READY_TO_PAY, PAID, CLOSED]
 
     TableBillSettlementState:
       type: string
@@ -1048,7 +1048,7 @@ components:
         payment_session_hint:
           type: object
           nullable: true
-          description: Present only if PAYMENT_ACTIVE — no bill without join
+          description: Present only if READY_TO_PAY — no bill without join
           properties:
             payment_session_id:
               type: string

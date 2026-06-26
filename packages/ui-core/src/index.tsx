@@ -32,9 +32,17 @@ export function Button({
   );
 }
 
-export function Card({ title, children }: { title?: string; children: ReactNode }) {
+export function Card({
+  title,
+  children,
+  className,
+}: {
+  title?: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rt-card">
+    <div className={className ? `rt-card ${className}` : "rt-card"}>
       {title ? <h2 className="rt-card__title">{title}</h2> : null}
       {children}
     </div>
