@@ -2,8 +2,7 @@ import { useStaffTables, useServiceSignals, useAckSignal } from "@rekentafel/sta
 import type { StaffTable } from "@rekentafel/staff-hooks";
 import { LanguageSwitcher, useT } from "@rekentafel/i18n";
 import { Button, Card, formatEuro, Spinner } from "@rekentafel/ui-core";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/v1";
+import { API_BASE } from "../config";
 
 const stateClass: Record<string, string> = {
   DORMANT: "floor-table--dormant",
@@ -90,6 +89,13 @@ export function FloorGrid({
       {error && (
         <Card title={t("staff.floor.noConnection")}>
           <p className="muted">{t("staff.floor.noConnectionBody")}</p>
+          <code className="rt-network-banner__url">{API_BASE}</code>
+          <p className="muted" style={{ marginTop: "0.75rem", fontSize: "0.8125rem" }}>
+            {t("staff.floor.noConnectionHint")}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+            {t("common.retry")}
+          </Button>
         </Card>
       )}
 

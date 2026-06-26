@@ -10,6 +10,7 @@ export const nl = {
     error: "Er ging iets mis",
     back: "Terug",
     ok: "OK",
+    retry: "Opnieuw",
     seats: "stoelen",
   },
   network: {
@@ -104,7 +105,9 @@ export const nl = {
       signalsOpen: "open signaal",
       signalsOpenPlural: "open signalen",
       noConnection: "Geen verbinding",
-      noConnectionBody: "Start de API op de Mac mini en controleer DEV_VENUE_ID in .env.",
+      noConnectionBody: "Kan de Mac mini API niet bereiken op het adres hieronder.",
+      noConnectionHint:
+        "Mac mini: pnpm dev:api. iPhone-app: op MacBook ./scripts/prepare-waiter-ios.sh <IP> en opnieuw builden in Xcode.",
     },
     table: {
       back: "← Vloerplan",
@@ -171,6 +174,7 @@ export const en: Messages = {
     error: "Something went wrong",
     back: "Back",
     ok: "OK",
+    retry: "Retry",
     seats: "seats",
   },
   network: {
@@ -265,7 +269,9 @@ export const en: Messages = {
       signalsOpen: "open signal",
       signalsOpenPlural: "open signals",
       noConnection: "No connection",
-      noConnectionBody: "Start the API on the Mac mini and check DEV_VENUE_ID in .env.",
+      noConnectionBody: "Cannot reach the Mac mini API at the URL below.",
+      noConnectionHint:
+        "Mac mini: run pnpm dev:api. iPhone app: on MacBook run ./scripts/prepare-waiter-ios.sh <IP> and rebuild in Xcode.",
     },
     table: {
       back: "← Floor plan",

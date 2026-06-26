@@ -24,7 +24,14 @@ Bill-splitting restaurant demo built on this repo — **guest QR web + waiter ap
 **Start on Mac mini:** `./scripts/rekentafel-poc.sh`  
 **Cheat sheet:** [docs/rekentafel/POC.md](docs/rekentafel/POC.md)  
 **On-screen QR codes:** `http://<VITE_LAN_HOST>:5173/qr-demo.html`  
-**Waiter iOS (MacBook + Xcode):** build `apps/waiter-mobile` — see POC.md
+**Waiter iPhone app (on your MacBook):**
+
+```bash
+./scripts/prepare-waiter-ios.sh <MAC_MINI_IP>
+pnpm --filter @rekentafel/waiter-mobile cap:open:ios
+```
+
+See `docs/rekentafel/POC.md`.
 
 ```bash
 cp .env.example .env          # add MOLLIE_API_KEY (test_), VITE_LAN_HOST

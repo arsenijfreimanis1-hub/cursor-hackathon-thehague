@@ -59,47 +59,51 @@ You can also download from the waiter app: **Vloerplan → QR printen**.
 
 ## Part B — MacBook (waiter iPhone app)
 
+### Roles
+
+| Machine | Job |
+|---------|-----|
+| **Mac mini** | Runs API + database (`pnpm dev:api` or `./scripts/rekentafel-poc.sh`) |
+| **MacBook** | Builds the iOS app once per API URL change |
+| **iPhone** | Same Wi‑Fi as Mac mini («Titaan Members») |
+
 ### One-time prerequisites
 
 - Xcode from the App Store
 - Node.js 22+ and pnpm
 - iPhone connected by USB (trust this computer)
 
-### Clone and build
+### Clone and build (MacBook)
 
 ```bash
-git clone https://github.com/arsenijfreimanis1-hub/cursor-hackathon-thehague.git
+git clone git@github.com:arsenijfreimanis1-hub/cursor-hackathon-thehague.git
 cd cursor-hackathon-thehague
 pnpm install
 ```
 
-Copy the API URL from the Mac mini PoC output:
+Get the Mac mini LAN IP from the mini (`./scripts/print-network-urls.sh`) — usually `10.43.0.40`.
+
+**One command** — bakes the API URL into the app and syncs Xcode:
 
 ```bash
-cp apps/waiter-mobile/.env.production.example apps/staff-web/.env.production
-```
-
-Edit `apps/staff-web/.env.production` — set `VITE_API_BASE_URL` to your Mac mini public URL + `/v1`:
-
-```
-VITE_API_BASE_URL=https://xxxx.trycloudflare.com/v1
-VITE_BASE_PATH=/
-```
-
-Build and open in Xcode:
-
-```bash
-pnpm --filter @rekentafel/staff-web build
-pnpm --filter @rekentafel/waiter-mobile cap:sync
+./scripts/prepare-waiter-ios.sh 10.43.0.40
 pnpm --filter @rekentafel/waiter-mobile cap:open:ios
 ```
 
-In Xcode: select your **iPhone** → click **Run** (▶). The app installs on your phone.
+In Xcode: select your **iPhone** → **Run** (▶).
+
+Manual alternative: copy `apps/staff-web/.env.production.example` → `.env.production`, edit `VITE_API_BASE_URL`, then build + `cap sync`.
 
 ### Log in on the app
 
 - Email: `waiter@demo.rekentafel.nl`
 - Password: anything (dev mode)
+
+### If you see “No connection”
+
+1. **Mac mini:** API must be running — `curl http://10.43.0.40:3000/v1/health` should return `{"status":"ok"}`
+2. **MacBook:** App was likely built with `localhost` — re-run `./scripts/prepare-waiter-ios.sh 10.43.0.40` and Run in Xcode again
+3. **iPhone:** Must be on the same Wi‑Fi as the Mac mini
 
 ---
 

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { LanguageSwitcher, NetworkBanner, useT } from "@rekentafel/i18n";
 import { Button, Card, Field } from "@rekentafel/ui-core";
-
-const LAN_HOST = import.meta.env.VITE_LAN_HOST;
+import { LAN_HOST } from "../config";
 
 export function LoginShell({ onLogin }: { onLogin: (token: string) => void }) {
   const t = useT();

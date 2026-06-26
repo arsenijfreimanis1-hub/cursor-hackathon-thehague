@@ -1,7 +1,6 @@
 import { Button, Card } from "@rekentafel/ui-core";
 import { LanguageSwitcher, useT } from "@rekentafel/i18n";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/v1";
+import { API_BASE } from "../config";
 
 const QR_FILES = ["rekentafel-qr-sheet.pdf", "T01.png", "T02.png", "T03.png", "T04.png"] as const;
 

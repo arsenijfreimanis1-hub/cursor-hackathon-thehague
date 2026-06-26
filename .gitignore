@@ -17,6 +17,7 @@ build/
 coverage/
 macos-helper/JarvisHelper.app/
 macos-helper/.build/
+apps/staff-web/.env.production
 mac-mini/.env
 mac-mini/cloudflared/*.json
 .tmp_gh_token

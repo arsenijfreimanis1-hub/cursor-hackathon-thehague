@@ -13,7 +13,8 @@
     "dev:api": "pnpm --filter @rekentafel/api dev",
     "dev:guest": "pnpm --filter @rekentafel/guest-web dev",
     "dev:staff": "pnpm --filter @rekentafel/staff-web dev",
-    "generate:qr": "dotenv -e .env -- tsx scripts/generate-qr-codes.ts"
+    "generate:qr": "dotenv -e .env -- tsx scripts/generate-qr-codes.ts",
+    "prepare:waiter-ios": "bash scripts/prepare-waiter-ios.sh"
   },
   "devDependencies": {
     "@prisma/client": "^6.10.1",
