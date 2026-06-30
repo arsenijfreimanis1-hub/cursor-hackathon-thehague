@@ -356,6 +356,8 @@ APScheduler runs inside JarvisCore (`scheduler.py`), started from `jarvis/main.p
 | `memory_compression` | Every 6h | Summarize idle sessions into long-term memory |
 | `voice_watchdog` | Every 2 min | Heal Ollama + helper voice pipeline |
 | `notion_export` | Every 12h | Export events to Notion (if configured) |
+| `screen_observer` | Every 60s | Summarize screen captures via Ollama |
+| `popup_watchdog` | Every 45s (when full access on) | Native AX dialog dismissal (no TCC spam) |
 
 ---
 
@@ -374,35 +376,38 @@ APScheduler runs inside JarvisCore (`scheduler.py`), started from `jarvis/main.p
 | `GET /api/approvals` | Approval inbox |
 | `POST /api/approvals/{id}` | Approve or deny |
 | `GET /api/sessions/active` | Active conversation state |
-| `GET /api/learning/report` | Self-learning report |
+| `POST /api/permissions/bootstrap` | Open missing settings panes + native AX (no TCC spam) |
+| `POST /api/permissions/prompt` | User-initiated TCC permission dialogs |
 
 Helper (`:8788`): `GET /status`, `POST /speak`, `POST /wake/start`, `POST /sleep`, `POST /notify`, `POST /screenshot`, `POST /click`, `POST /type`, `GET /screen/status`, `POST /screen/pause`, `POST /screen/resume`.
 
 ---
 
-## Screen observer (always-on)
+## Screen observer (opt-in)
 
-JarvisHelper `ScreenWatcher` captures the frontmost app every ~10s (pHash dedup + on-device OCR), POSTs events to JarvisCore, which summarizes every 60s via Ollama and relays to Notion + self-improvement.
+**Architecture:** JarvisHelper `ScreenWatcher` is the capture layer. Notion is export-only — it receives text summaries via `notion_sync.py`, never raw screen frames. The "Notion Observer" agent is a sync/export role, not a screen recorder.
+
+Screen capture is **off by default** (`JARVIS_SCREEN_WATCH_ENABLED=false`). The helper starts paused and does not auto-capture on launch. Enable via env and `POST /api/screen/resume` (or helper `POST /screen/resume`). Screen Recording TCC prompts are user-initiated only (menubar "Grant permissions…").
+
+When enabled, `ScreenWatcher` captures the frontmost app every ~10s (pHash dedup + on-device OCR), POSTs events to JarvisCore, which summarizes every 60s via Ollama and optionally relays summaries to Notion.
 
 ```mermaid
 flowchart LR
-  Helper[ScreenWatcher Swift] -->|POST /api/screen/events| Observer[screen_observer.py]
+  Capture[ScreenWatcher Swift CAPTURE] -->|POST /api/screen/events| Observer[screen_observer.py]
   Observer --> SQLite[(screen_captures + screen_summaries)]
   Observer -->|60s tick| Ollama[Ollama summarize]
-  Observer --> Notion[notion_sync]
+  Observer -->|optional text only| Notion[notion_sync EXPORT]
   Observer --> Learning[learning.py friction]
   Router[router.py] -->|SCREEN CONTEXT index| Chat
   Improve[improve_run.py] -->|timeline on probes| Cursor
 ```
 
-| Component | Path |
-|-----------|------|
-| Capture | `macos-helper/Sources/JarvisHelper/ScreenWatcher.swift` |
-| Store + summarize | `jarvis/services/screen_observer.py` |
-| Lifecycle hooks | `jarvis/services/screen_hooks.py` |
-| Notion relay | `jarvis/services/notion_sync.py` → `sync_screen_summary` |
-| Specialist agent | `Notion Observer` (seed: `scripts/seed-notion-observer-agent.py`) |
-| Setup | `scripts/setup-screen-observer.sh` |
+| Layer | Role |
+|-------|------|
+| **JarvisHelper ScreenWatcher** | Native capture (screencapture + Vision OCR) — requires Screen Recording TCC |
+| **screen_observer.py** | Store, summarize, privacy exclusions |
+| **notion_sync.py** | Export summaries to Notion — does NOT capture screens |
+| **popup_handler.py** | Native AX dialog clicks (Accessibility only); vision fallback needs Screen Recording |
 
 Core endpoints: `GET /api/screen/status`, `GET /api/screen/context`, `POST /api/screen/summarize-now`.
 
