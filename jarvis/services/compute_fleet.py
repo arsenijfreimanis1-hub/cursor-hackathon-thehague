@@ -1,0 +1,110 @@
+"""Execution runtime selection for local workers or cloud agents."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any, Literal
+
+from jarvis.config import settings
+from jarvis.services import cursor_agent, github_sync
+
+log = logging.getLogger("jarvis.compute_fleet")
+
+RuntimeKind = Literal["local", "cloud", "fleet", "auto"]
+
+
+def local_worker_count() -> int:
+    return max(3, int(getattr(settings, "build_parallel", 3)))
+
+
+def cloud_worker_count() -> int:
+    return max(3, int(getattr(settings, "compute_cloud_workers", 3)))
+
+
+def resolve_runtime(explicit: str | None = None) -> str:
+    """Pick execution runtime for build slices."""
+    raw = (explicit or getattr(settings, "cursor_runtime", "local") or "local").lower()
+    if raw == "auto":
+        return "local"
+    return raw
+
+
+def effective_parallel(runtime: str | None = None) -> int:
+    rt = resolve_runtime(runtime)
+    if rt == "local":
+        return local_worker_count()
+    if rt == "cloud":
+        return cloud_worker_count()
+    if rt == "fleet":
+        return max(local_worker_count(), cloud_worker_count())
+    return local_worker_count()
+
+
+async def dispatch_slice(
+    prompt: str,
+    *,
+    build_id: int,
+    slice_id: str,
+    cwd: str | None = None,
+    repo_url: str | None = None,
+    branch: str | None = None,
+    runtime: str | None = None,
+    source: str = "build_fleet",
+    timeout_sec: int = 300,
+) -> dict[str, Any]:
+    """Run one slice on local disk or a Cursor Cloud VM."""
+    rt = resolve_runtime(runtime)
+
+    if rt in ("cloud", "fleet") and repo_url:
+        try:
+            result = await asyncio.wait_for(
+                cursor_agent.run(
+                    prompt,
+                    runtime="cloud",
+                    repo_url=repo_url,
+                    branch=branch or f"slice/{slice_id}",
+                    handle_popups=False,
+                    source=source,
+                ),
+                timeout=timeout_sec,
+            )
+            result["runtime"] = "cloud"
+            result["slice_id"] = slice_id
+            return result
+        except asyncio.TimeoutError:
+            return {"ok": False, "error": "cloud slice timed out", "runtime": "cloud", "slice_id": slice_id}
+        except Exception as exc:
+            log.warning("cloud dispatch failed for %s, falling back to local: %s", slice_id, exc)
+            if rt == "cloud":
+                return {"ok": False, "error": str(exc), "runtime": "cloud", "slice_id": slice_id}
+
+    if not cwd:
+        return {"ok": False, "error": "local runtime requires cwd", "slice_id": slice_id}
+
+    try:
+        result = await asyncio.wait_for(
+            cursor_agent.run(
+                prompt,
+                cwd=cwd,
+                handle_popups=False,
+                source=source,
+            ),
+            timeout=timeout_sec,
+        )
+        result["runtime"] = "local"
+        result["slice_id"] = slice_id
+        return result
+    except asyncio.TimeoutError:
+        return {"ok": False, "error": "local slice timed out", "runtime": "local", "slice_id": slice_id}
+
+
+async def fleet_status() -> dict[str, Any]:
+    return {
+        "runtime": resolve_runtime(),
+        "local_workers": local_worker_count(),
+        "cloud_workers": cloud_worker_count(),
+        "parallel": effective_parallel(),
+        "github_configured": github_sync.configured(),
+        "hub_repo": github_sync.hub_repo_url() if github_sync.configured() else None,
+    }

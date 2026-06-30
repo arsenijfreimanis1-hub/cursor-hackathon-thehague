@@ -54,6 +54,21 @@ async def screen_observer_tick() -> None:
     await screen_observer.observer_tick()
 
 
+async def github_state_sync() -> None:
+    """Push William state to william-hub on GitHub."""
+    from jarvis.services import github_sync, state_export
+
+    if not github_sync.configured():
+        return
+    result = await state_export.export_all()
+    if result.get("ok"):
+        await tasks.create_task(
+            title="GitHub state sync",
+            body=f"Exported to {result.get('hub_url', 'william-hub')}",
+            source="github",
+        )
+
+
 async def voice_watchdog() -> None:
     """Keep William's voice pipeline alive 24/7."""
     from jarvis.services import ollama
@@ -63,6 +78,17 @@ async def voice_watchdog() -> None:
         await macos.restart_core_service()
 
     await macos.ensure_voice_awake()
+
+
+async def popup_watchdog() -> None:
+    """Dismiss permission dialogs using native Accessibility + vision fallback."""
+    from jarvis.services import popup_handler, security
+
+    if not settings.popup_handler_enabled:
+        return
+    if not await security.is_full_access():
+        return
+    await popup_handler.handle_popups(full_control=True, max_attempts=2)
 
 
 def start() -> None:
@@ -111,6 +137,21 @@ def start() -> None:
         id="screen_observer",
         replace_existing=True,
     )
+    scheduler.add_job(
+        popup_watchdog,
+        "interval",
+        seconds=settings.popup_watchdog_interval_seconds,
+        id="popup_watchdog",
+        replace_existing=True,
+    )
+    if getattr(settings, "github_sync_interval_hours", 0) > 0:
+        scheduler.add_job(
+            github_state_sync,
+            "interval",
+            hours=settings.github_sync_interval_hours,
+            id="github_state_sync",
+            replace_existing=True,
+        )
     scheduler.start()
 
 

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0b0f14">
+  <title>Jarvis Minis</title>
+  <link rel="manifest" href="/static/minis-manifest.json">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: #151b24;
+      --accent: #3b82f6;
+      --ok: #22c55e;
+      --bad: #ef4444;
+      --text: #e8edf5;
+      --muted: #8b98ab;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: none;
+      overscroll-behavior: none;
+    }
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 4px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--bad);
+      flex-shrink: 0;
+    }
+    .dot.ok { background: var(--ok); }
+    h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .status {
+      margin-left: auto;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .screen-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 40vh;
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid #243041;
+    }
+    #screen {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #000;
+      pointer-events: none;
+    }
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+      text-align: center;
+      padding: 24px;
+      pointer-events: none;
+    }
+    #touchpad {
+      margin-top: 12px;
+      height: 42vh;
+      min-height: 180px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #1a2330, #121820);
+      border: 1px solid #2a3648;
+      position: relative;
+      overflow: hidden;
+    }
+    #touchpad::after {
+      content: "Touch to control Mac";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      pointer-events: none;
+    }
+    #touchpad.active::after { opacity: 0.35; }
+    .hint {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      padding: 10px 0 4px;
+    }
+    .admin {
+      margin-top: 8px;
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--panel);
+      border: 1px solid #243041;
+    }
+    .admin h2 {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .admin-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .admin button, .admin label.upload {
+      appearance: none;
+      border: 1px solid #2a3648;
+      background: #1a2330;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .admin label.upload { display: inline-block; }
+    .admin button.danger { border-color: #7f1d1d; color: #fecaca; }
+    .admin .msg {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+    .builds {
+      margin-top: 8px;
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--panel);
+      border: 1px solid #243041;
+    }
+    .builds h2 {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .build-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #243041;
+      font-size: 0.82rem;
+    }
+    .build-item:last-child { border-bottom: none; }
+    .build-phase {
+      color: var(--accent);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .build-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .build-actions button {
+      appearance: none;
+      border: 1px solid #2a3648;
+      background: #1a2330;
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="dot" id="dot"></div>
+      <h1>Jarvis Minis</h1>
+      <div class="status" id="status">Connecting…</div>
+    </header>
+
+    <div class="screen-wrap">
+      <img id="screen" alt="Mac screen stream" hidden>
+      <div class="placeholder" id="placeholder">Enable Screen Share on the Mac bubble to see the display.</div>
+    </div>
+
+    <div id="touchpad" aria-label="Remote touchpad"></div>
+    <div class="hint" id="hint">Remote control must be enabled on the Mac.</div>
+
+    <section class="admin">
+      <h2>Service control</h2>
+      <div class="admin-row">
+        <button type="button" id="btn-restart">Restart</button>
+        <button type="button" id="btn-hard-reset" class="danger">Hard Reset</button>
+        <button type="button" id="btn-build">Build helper</button>
+        <label class="upload">
+          Upload build
+          <input type="file" id="file-helper" accept="*/*" hidden>
+        </label>
+      </div>
+      <div class="msg" id="admin-msg"></div>
+    </section>
+
+    <section class="builds">
+      <h2>Build pipeline</h2>
+      <div id="build-list">Loading builds…</div>
+    </section>
+  </div>
+
+  <script>
+    const dot = document.getElementById('dot');
+    const statusEl = document.getElementById('status');
+    const screenImg = document.getElementById('screen');
+    const placeholder = document.getElementById('placeholder');
+    const touchpad = document.getElementById('touchpad');
+    const hint = document.getElementById('hint');
+    const adminMsg = document.getElementById('admin-msg');
+    const buildList = document.getElementById('build-list');
+
+    let remoteEnabled = false;
+    let screenEnabled = false;
+    let frameTimer = null;
+    let pointerDown = false;
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/minis/status');
+        if (!res.ok) throw new Error('status failed');
+        const data = await res.json();
+        remoteEnabled = data.remote_control?.remote_control_enabled ?? false;
+        screenEnabled = !!data.screen_share_enabled;
+        const helperOk = data.macos_helper?.ok ?? false;
+        dot.classList.toggle('ok', data.core_ok && helperOk);
+        statusEl.textContent = data.core_ok
+          ? (helperOk ? 'Connected' : 'Helper offline')
+          : 'Core offline';
+        hint.textContent = remoteEnabled
+          ? 'Drag to move pointer, tap to click.'
+          : 'Remote control must be enabled on the Mac.';
+        manageFramePoll();
+      } catch {
+        dot.classList.remove('ok');
+        statusEl.textContent = 'Offline';
+      }
+    }
+
+    function manageFramePoll() {
+      if (screenEnabled && !frameTimer) {
+        frameTimer = setInterval(refreshFrame, 450);
+        refreshFrame();
+      } else if (!screenEnabled && frameTimer) {
+        clearInterval(frameTimer);
+        frameTimer = null;
+        screenImg.hidden = true;
+        placeholder.hidden = false;
+      }
+    }
+
+    async function refreshFrame() {
+      try {
+        const res = await fetch('/api/minis/screen/frame?t=' + Date.now());
+        if (!res.ok) throw new Error('no frame');
+        const blob = await res.blob();
+        screenImg.src = URL.createObjectURL(blob);
+        screenImg.hidden = false;
+        placeholder.hidden = true;
+      } catch {
+        screenImg.hidden = true;
+        placeholder.hidden = false;
+        placeholder.textContent = screenEnabled
+          ? 'Waiting for screen frame…'
+          : 'Enable Screen Share on the Mac bubble to see the display.';
+      }
+    }
+
+    function mapPoint(clientX, clientY) {
+      const rect = touchpad.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 1920;
+      const y = ((clientY - rect.top) / rect.height) * 1080;
+      return { x: Math.max(0, x), y: Math.max(0, y) };
+    }
+
+    async function sendInput(type, x, y) {
+      if (!remoteEnabled) return;
+      try {
+        await fetch('/api/minis/input', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, x, y }),
+        });
+      } catch {}
+    }
+
+    function onPointerDown(e) {
+      if (!remoteEnabled) return;
+      pointerDown = true;
+      touchpad.classList.add('active');
+      touchpad.setPointerCapture(e.pointerId);
+      const p = mapPoint(e.clientX, e.clientY);
+      sendInput('down', p.x, p.y);
+    }
+
+    function onPointerMove(e) {
+      if (!pointerDown || !remoteEnabled) return;
+      const p = mapPoint(e.clientX, e.clientY);
+      sendInput('move', p.x, p.y);
+    }
+
+    function onPointerUp(e) {
+      if (!pointerDown) return;
+      pointerDown = false;
+      touchpad.classList.remove('active');
+      const p = mapPoint(e.clientX, e.clientY);
+      sendInput('up', p.x, p.y);
+      sendInput('tap', p.x, p.y);
+    }
+
+    touchpad.addEventListener('pointerdown', onPointerDown);
+    touchpad.addEventListener('pointermove', onPointerMove);
+    touchpad.addEventListener('pointerup', onPointerUp);
+    touchpad.addEventListener('pointercancel', onPointerUp);
+
+    async function adminAction(url, options = {}) {
+      adminMsg.textContent = 'Working…';
+      try {
+        const res = await fetch(url, options);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || data.error || 'failed');
+        adminMsg.textContent = data.action || 'Done';
+      } catch (err) {
+        adminMsg.textContent = String(err.message || err);
+      }
+    }
+
+    document.getElementById('btn-restart').addEventListener('click', () => {
+      adminAction('/api/minis/restart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: 'both' }),
+      });
+    });
+
+    document.getElementById('btn-hard-reset').addEventListener('click', () => {
+      if (!confirm('Hard reset turns off screen share and remote control, then restarts both services. Continue?')) return;
+      adminAction('/api/minis/hard-reset', { method: 'POST' });
+    });
+
+    document.getElementById('btn-build').addEventListener('click', () => {
+      adminAction('/api/minis/update/build', { method: 'POST' });
+    });
+
+    document.getElementById('file-helper').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      adminMsg.textContent = 'Uploading…';
+      try {
+        const res = await fetch('/api/minis/update/helper-binary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: await file.arrayBuffer(),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || data.error || 'upload failed');
+        adminMsg.textContent = data.action || 'Update applied';
+      } catch (err) {
+        adminMsg.textContent = String(err.message || err);
+      }
+      e.target.value = '';
+    });
+
+    fetchStatus();
+    setInterval(fetchStatus, 3000);
+
+    async function fetchBuilds() {
+      try {
+        const res = await fetch('/api/builds?limit=5');
+        if (!res.ok) throw new Error('builds failed');
+        const data = await res.json();
+        const builds = data.builds || [];
+        if (!builds.length) {
+          buildList.textContent = 'No active builds.';
+          return;
+        }
+        buildList.innerHTML = builds.map(b => {
+          const phase = (b.phase || b.status || '').replace(/_/g, ' ');
+          let actions = '';
+          if (b.phase === 'awaiting_micro_approval') {
+            actions = `<div class="build-actions"><button data-approve-micro="${b.id}">Approve slices</button></div>`;
+          } else if (b.phase === 'awaiting_prd_approval') {
+            actions = `<div class="build-actions"><button data-approve-prd="${b.id}">Approve PRD</button></div>`;
+          }
+          return `<div class="build-item">
+            <strong>#${b.id}</strong> ${(b.prompt || '').slice(0, 60)}
+            <div class="build-phase">${phase}</div>
+            ${actions}
+          </div>`;
+        }).join('');
+        buildList.querySelectorAll('[data-approve-micro]').forEach(btn => {
+          btn.addEventListener('click', () => approveBuild(btn.dataset.approveMicro, 'micro'));
+        });
+        buildList.querySelectorAll('[data-approve-prd]').forEach(btn => {
+          btn.addEventListener('click', () => approveBuild(btn.dataset.approvePrd, 'prd'));
+        });
+      } catch {
+        buildList.textContent = 'Build status unavailable.';
+      }
+    }
+
+    async function approveBuild(id, gate) {
+      const url = gate === 'prd'
+        ? `/api/builds/${id}/approve-prd`
+        : `/api/builds/${id}/approve-micro-prompts`;
+      try {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || 'approve failed');
+        fetchBuilds();
+      } catch (err) {
+        buildList.textContent = String(err.message || err);
+      }
+    }
+
+    fetchBuilds();
+    setInterval(fetchBuilds, 5000);
+  </script>
+</body>
+</html>

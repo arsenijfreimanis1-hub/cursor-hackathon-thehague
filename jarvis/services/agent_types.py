@@ -15,6 +15,7 @@ KNOWN_AGENT_TOOLS = frozenset(
         "system_control.execute",
         "terminal.execute",
         "web.research",
+        "web.automate",
     }
 )
 

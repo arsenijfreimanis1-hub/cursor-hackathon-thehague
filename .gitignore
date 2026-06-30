@@ -16,7 +16,12 @@ build/
 .next/
 coverage/
 macos-helper/JarvisHelper.app/
+macos-helper/WilliamKiosk.app/
 macos-helper/.build/
+.voice-venv/
+.test-venv/
+backups/
+models/
 apps/staff-web/.env.production
 mac-mini/.env
 mac-mini/cloudflared/*.json

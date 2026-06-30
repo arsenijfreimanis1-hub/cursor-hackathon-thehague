@@ -213,6 +213,21 @@ async def log_interaction(
     )
     event["alignment_score"] = score
     event["alignment_notes"] = notes
+    try:
+        from jarvis.services import vigil_metrics
+
+        vigil_metrics.emit_interaction(
+            source=source,
+            user_message=user_message,
+            assistant_reply=assistant_reply,
+            intent=intent,
+            engine=engine,
+            task_status=task_status,
+            alignment_score=score,
+            metadata=metadata,
+        )
+    except Exception:
+        pass
     return event
 
 
@@ -248,6 +263,19 @@ async def log_task_outcome(
     )
     event["alignment_score"] = score
     event["alignment_notes"] = notes
+    try:
+        from jarvis.services import vigil_metrics
+
+        vigil_metrics.emit_task_outcome(
+            source=source,
+            user_message=user_message,
+            reply=reply,
+            task_status=task_status,
+            engine=engine,
+            alignment_score=score,
+        )
+    except Exception:
+        pass
     return event
 
 
@@ -260,13 +288,20 @@ async def log_integration(
     metadata: dict | None = None,
 ) -> dict:
     meta = {"integration": integration, **(metadata or {})}
-    return await log_event(
+    result = await log_event(
         "integration",
         source=source,
         user_message=detail,
         metadata=meta,
         task_id=task_id,
     )
+    try:
+        from jarvis.services import vigil_metrics
+
+        vigil_metrics.emit_integration(integration, detail=detail, metadata=metadata)
+    except Exception:
+        pass
+    return result
 
 
 async def list_events(

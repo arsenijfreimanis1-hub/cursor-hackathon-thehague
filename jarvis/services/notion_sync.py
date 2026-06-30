@@ -1,4 +1,8 @@
-"""Optional Notion export: session summaries, task outcomes, screenshots."""
+"""Optional Notion export destination — NOT the screen capture layer.
+
+Capture: JarvisHelper ScreenWatcher (Swift) → screen_observer.py → SQLite.
+Notion: receives text summaries only via sync_screen_summary() and related exports.
+"""
 
 from __future__ import annotations
 
@@ -252,6 +256,71 @@ async def ensure_screen_database() -> dict:
         await screen_observer.set_meta("notion_screen_db_id", db_id)
         ensure_screen_database._db_id = db_id  # type: ignore[attr-defined]
     return {"ok": True, "database_id": db_id, "url": result.get("url")}
+
+
+async def diagnostics() -> dict:
+    """Summarize whether Notion sync paths are active."""
+    import aiosqlite
+
+    from jarvis.database import DB_PATH
+
+    payload: dict = {
+        "configured": configured(),
+        "parent_page_id": settings.notion_parent_page_id or None,
+        "export_interval_hours": settings.notion_export_interval_hours,
+        "paths": {
+            "manual_export": configured(),
+            "scheduled_event_export": configured(),
+            "session_end_sync": configured(),
+            "screen_summary_sync": configured() and settings.screen_watch_enabled,
+            "significant_task_capture": configured(),
+        },
+    }
+    if not configured():
+        payload["note"] = "Set JARVIS_NOTION_API_KEY and JARVIS_NOTION_PARENT_PAGE_ID in .env"
+        return payload
+
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            row = await (
+                await db.execute("SELECT COUNT(*) FROM interaction_events")
+            ).fetchone()
+            payload["interaction_events"] = row[0] if row else 0
+            row = await (
+                await db.execute(
+                    "SELECT COUNT(*) FROM screen_summaries WHERE notion_page_id IS NOT NULL AND notion_page_id != ''"
+                )
+            ).fetchone()
+            payload["screen_pages_synced"] = row[0] if row else 0
+            row = await (
+                await db.execute("SELECT COUNT(*) FROM screen_summaries")
+            ).fetchone()
+            payload["screen_summaries_total"] = row[0] if row else 0
+            row = await (
+                await db.execute("SELECT COUNT(*) FROM screen_captures")
+            ).fetchone()
+            payload["screen_captures_total"] = row[0] if row else 0
+            row = await (
+                await db.execute("SELECT COUNT(*) FROM tasks WHERE source = 'notion'")
+            ).fetchone()
+            payload["notion_export_tasks"] = row[0] if row else 0
+            row = await (
+                await db.execute("SELECT COUNT(*) FROM specialist_agents WHERE name LIKE '%Notion%'")
+            ).fetchone()
+            payload["notion_observer_agent"] = (row[0] if row else 0) > 0
+    except Exception as exc:
+        payload["db_error"] = str(exc)
+
+    blockers: list[str] = []
+    if payload.get("screen_captures_total", 0) == 0:
+        blockers.append("Screen capture has no data — grant Screen Recording to JarvisHelper")
+    if payload.get("screen_summaries_total", 0) == 0:
+        blockers.append("No screen summaries yet — observer tick may be blocked")
+    if not payload.get("notion_observer_agent"):
+        blockers.append("Notion Observer agent not seeded — run scripts/seed-notion-observer-agent.py")
+    if blockers:
+        payload["blockers"] = blockers
+    return payload
 
 
 async def sync_screen_summary(summary: dict) -> dict:

@@ -1,35 +1,65 @@
-import AVFoundation
 import AppKit
+import AVFoundation
 import Foundation
 
 enum Sound {
-    static let displayName = "wake chime / sleep tone"
+    static let displayName = "paying_attention.caf / stop_attention.caf"
 
-    /// Ascending three-note chime — clearly "I'm listening".
+    /// Ascending chime — clearly "I'm listening".
     static func listening() {
-        playSequence(
-            notes: [(523.25, 0.09), (659.25, 0.09), (783.99, 0.14)],
-            volume: 0.5
-        )
+        playBundleSound(named: "paying_attention", fallback: listeningSynth)
     }
 
     /// Soft low tone — entering sleep mode.
     static func sleepEntry() {
-        playSequence(
+        playSynth(
             notes: [(220.0, 0.12), (185.0, 0.14), (146.83, 0.18)],
             volume: 0.32
         )
     }
 
-    /// Descending soft tone — clearly "going idle".
+    /// Descending tone — going idle / command accepted.
     static func notListening() {
-        playSequence(
+        playBundleSound(named: "stop_attention", fallback: notListeningSynth)
+    }
+
+    /// Brief acknowledgment — processing command.
+    static func responding() {
+        playSynth(notes: [(440.0, 0.06), (554.37, 0.08)], volume: 0.28)
+    }
+
+    private static func listeningSynth() {
+        playSynth(
+            notes: [(523.25, 0.09), (659.25, 0.09), (783.99, 0.14)],
+            volume: 0.5
+        )
+    }
+
+    private static func notListeningSynth() {
+        playSynth(
             notes: [(392.0, 0.1), (311.13, 0.11), (233.08, 0.16)],
             volume: 0.38
         )
     }
 
-    private static func playSequence(notes: [(frequency: Double, duration: Double)], volume: Float) {
+    private static func playBundleSound(named: String, fallback: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            if let url = Bundle.main.url(forResource: named, withExtension: "caf", subdirectory: "Sounds")
+                ?? Bundle.main.url(forResource: named, withExtension: "caf") {
+                let sound = NSSound(contentsOf: url, byReference: true)
+                sound?.volume = 0.85
+                if sound?.play() == true {
+                    return
+                }
+            }
+            fallback()
+        }
+    }
+
+    private static func playSynth(
+        notes: [(frequency: Double, duration: Double)],
+        volume: Float
+    ) {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try playNotes(notes, volume: volume)

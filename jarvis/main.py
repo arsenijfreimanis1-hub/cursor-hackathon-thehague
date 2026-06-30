@@ -15,13 +15,30 @@ STATIC = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from jarvis.services import macos, remote_control, security
+
     await init_db()
     self_modify.ensure_repo()
+    if settings.auto_full_access:
+        await security.set_full_access(True)
+    if settings.remote_control_enabled:
+        await remote_control.set_enabled(True)
     scheduler.start()
     worker.start()
+    from jarvis.services import vigil_metrics
+
+    vigil_metrics.start()
+    from jarvis.services import vigil_proxy
+
+    vst = vigil_proxy.status()
+    if settings.vigil_proxy_enabled and not vigil_proxy.configured():
+        log = __import__("logging").getLogger("jarvis")
+        log.warning("Vigil proxy enabled but missing: %s", ", ".join(vst.get("missing") or []))
     yield
     worker.stop()
     scheduler.stop()
+    await vigil_metrics.close()
+    await macos.close_helper_client()
 
 
 app = FastAPI(title=settings.agent_name, lifespan=lifespan)
@@ -37,3 +54,8 @@ async def chat():
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel():
     return FileResponse(STATIC / "panel.html")
+
+
+@app.get("/minis", response_class=HTMLResponse)
+async def minis_panel():
+    return FileResponse(STATIC / "minis.html")

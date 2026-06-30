@@ -139,4 +139,13 @@ async def merge_sandbox(branch: str | None = None) -> dict:
     if merge.returncode != 0:
         return {"ok": False, "error": merge.stderr or "merge failed"}
 
-    return {"ok": True, "merged": target, "tests": tests}
+    pushed = None
+    try:
+        from jarvis.services import github_sync, state_export
+
+        if github_sync.configured():
+            pushed = await state_export.export_all()
+    except Exception:
+        pushed = None
+
+    return {"ok": True, "merged": target, "tests": tests, "github_sync": pushed}

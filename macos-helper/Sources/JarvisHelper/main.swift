@@ -42,6 +42,22 @@ func runCommand(_ launchPath: String, _ arguments: [String]) -> Bool {
     }
 }
 
+func openMissingPermissionSettings() {
+    let perms = WakeWordListener.shared.authStatus()
+    if !Input.accessibilityGranted,
+       let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+        NSWorkspace.shared.open(url)
+    }
+    if perms["microphone"] as? String != "granted",
+       let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+        NSWorkspace.shared.open(url)
+    }
+    if perms["speech"] as? String != "granted",
+       let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") {
+        NSWorkspace.shared.open(url)
+    }
+}
+
 func takeScreenshot() -> [String: Any] {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("jarvis-screenshot.png")
     if runCommand("/usr/sbin/screencapture", ["-x", url.path]) {
@@ -84,7 +100,8 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
                 "ok": true,
                 "service": "jarvis-helper",
                 "port": port,
-                "wake_word": "hey willy",
+                "wake_word": listener.wakePhraseDisplay,
+                "wake_phrase_hint": listener.wakePhraseHint,
                 "voice_backend": listener.voiceBackendName,
                 "voice_state": listener.voiceState,
                 "wake_listening": listener.isActive,
@@ -149,21 +166,81 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
             respond(connection, status: "200 OK", body: ["ok": false, "error": "missing muted flag"])
         }
     case ("POST", "/permissions/prompt"):
+        // User-initiated only — triggers TCC prompts (menubar "Grant permissions…").
         DispatchQueue.main.async {
             WakeWordListener.shared.requestPermissionsUserInitiated()
+            ScreenWatcher.shared.promptScreenRecordingAccess()
         }
         let accessibility = Input.promptAccessibility()
         respond(connection, status: "200 OK", body: [
             "ok": true,
+            "user_initiated": true,
             "accessibility": Input.accessibilityGranted,
             "accessibility_prompt": accessibility,
             "permissions": WakeWordListener.shared.authStatus(),
             "wake_listening": WakeWordListener.shared.isActive,
             "healthy": WakeWordListener.shared.isHealthy,
+            "screen_capture_granted": ScreenWatcher.shared.status()["screen_capture_granted"] as? Bool ?? false,
+        ])
+    case ("POST", "/permissions/bootstrap"):
+        // Automated bootstrap — opens settings panes, no CGRequestScreenCaptureAccess.
+        DispatchQueue.main.async {
+            openMissingPermissionSettings()
+        }
+        var dialogResult: [String: Any] = ["ok": false, "acted": false]
+        DispatchQueue.main.sync {
+            dialogResult = DialogHandler.handleDialogs()
+        }
+        respond(connection, status: "200 OK", body: [
+            "ok": true,
+            "user_initiated": false,
+            "accessibility": Input.accessibilityGranted,
+            "permissions": WakeWordListener.shared.authStatus(),
+            "screen_capture_granted": ScreenWatcher.shared.status()["screen_capture_granted"] as? Bool ?? false,
+            "native": dialogResult,
+        ])
+    case ("POST", "/dialogs/handle"):
+        var dialogResult: [String: Any] = ["ok": false, "error": "dialog handler unavailable"]
+        DispatchQueue.main.sync {
+            dialogResult = DialogHandler.handleDialogs()
+        }
+        respond(connection, status: "200 OK", body: dialogResult)
+    case ("POST", "/screen/prompt-recording"):
+        DispatchQueue.main.async {
+            ScreenWatcher.shared.promptScreenRecordingAccess()
+        }
+        respond(connection, status: "200 OK", body: [
+            "ok": true,
+            "screen_capture_granted": ScreenWatcher.shared.status()["screen_capture_granted"] as? Bool ?? false,
         ])
     case ("POST", "/voice/enroll/start"):
-        SpeakerVerifier.shared.startEnrollment()
+        DispatchQueue.main.async {
+            WakeWordListener.shared.startGuidedVoiceEnrollment()
+        }
+        respond(connection, status: "200 OK", body: [
+            "ok": true,
+            "guided": true,
+            "voice_profile": SpeakerVerifier.shared.status(),
+        ])
+    case ("POST", "/voice/enroll/start-guided"):
+        DispatchQueue.main.async {
+            WakeWordListener.shared.startGuidedVoiceEnrollment()
+        }
+        respond(connection, status: "200 OK", body: [
+            "ok": true,
+            "guided": true,
+            "voice_profile": SpeakerVerifier.shared.status(),
+        ])
+    case ("POST", "/voice/enroll/cancel"):
+        DispatchQueue.main.async {
+            WakeWordListener.shared.cancelGuidedVoiceEnrollment()
+        }
         respond(connection, status: "200 OK", body: ["ok": true, "voice_profile": SpeakerVerifier.shared.status()])
+    case ("GET", "/voice/enroll/status"):
+        respond(connection, status: "200 OK", body: [
+            "ok": true,
+            "voice_profile": SpeakerVerifier.shared.status(),
+        ])
     case ("POST", "/voice/enroll/finish"):
         let ok = SpeakerVerifier.shared.finishEnrollment()
         respond(connection, status: "200 OK", body: ["ok": ok, "voice_profile": SpeakerVerifier.shared.status()])
@@ -177,11 +254,15 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
     case ("GET", "/screen/status"):
         respond(connection, status: "200 OK", body: ["ok": true, "watcher": ScreenWatcher.shared.status()])
     case ("POST", "/screen/pause"):
-        ScreenWatcher.shared.pause()
-        respond(connection, status: "200 OK", body: ["ok": true, "watcher": ScreenWatcher.shared.status()])
+        DispatchQueue.main.async {
+            ScreenWatcher.shared.pause()
+            respond(connection, status: "200 OK", body: ["ok": true, "watcher": ScreenWatcher.shared.status()])
+        }
     case ("POST", "/screen/resume"):
-        ScreenWatcher.shared.resume()
-        respond(connection, status: "200 OK", body: ["ok": true, "watcher": ScreenWatcher.shared.status()])
+        DispatchQueue.main.async {
+            ScreenWatcher.shared.resume()
+            respond(connection, status: "200 OK", body: ["ok": true, "watcher": ScreenWatcher.shared.status()])
+        }
     case ("POST", "/wake/start"):
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
@@ -218,11 +299,38 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
             WakeWordListener.shared.clearTranscriptOnMain()
         }
         respond(connection, status: "200 OK", body: ["ok": true])
+    case ("POST", "/mousemove"):
+        if let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any],
+           let x = json["x"] as? Double,
+           let y = json["y"] as? Double {
+            respond(connection, status: "200 OK", body: Input.moveMouse(x: x, y: y))
+        } else {
+            respond(connection, status: "200 OK", body: ["ok": false, "error": "missing x,y"])
+        }
+    case ("POST", "/mousedown"):
+        if let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any],
+           let x = json["x"] as? Double,
+           let y = json["y"] as? Double {
+            let button = json["button"] as? String ?? "left"
+            respond(connection, status: "200 OK", body: Input.mouseDown(x: x, y: y, button: button))
+        } else {
+            respond(connection, status: "200 OK", body: ["ok": false, "error": "missing x,y"])
+        }
+    case ("POST", "/mouseup"):
+        if let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any],
+           let x = json["x"] as? Double,
+           let y = json["y"] as? Double {
+            let button = json["button"] as? String ?? "left"
+            respond(connection, status: "200 OK", body: Input.mouseUp(x: x, y: y, button: button))
+        } else {
+            respond(connection, status: "200 OK", body: ["ok": false, "error": "missing x,y"])
+        }
     case ("POST", "/click"):
         if let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any],
            let x = json["x"] as? Double,
            let y = json["y"] as? Double {
-            respond(connection, status: "200 OK", body: Input.click(x: x, y: y))
+            let button = json["button"] as? String ?? "left"
+            respond(connection, status: "200 OK", body: Input.click(x: x, y: y, button: button))
         } else {
             respond(connection, status: "200 OK", body: ["ok": false, "error": "missing x,y"])
         }
@@ -241,6 +349,10 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
         } else {
             respond(connection, status: "200 OK", body: ["ok": false, "error": "missing key"])
         }
+    case ("POST", "/minis/restart"):
+        respond(connection, status: "200 OK", body: MinisServiceControl.restartHelper())
+    case ("POST", "/minis/hard-reset"):
+        respond(connection, status: "200 OK", body: MinisServiceControl.hardResetHelper())
     default:
         respond(connection, status: "404 Not Found", body: ["ok": false, "error": "not found"])
     }
@@ -295,7 +407,7 @@ func menuBarSymbol(for listener: WakeWordListener) -> String {
 func menuBarTooltip(for listener: WakeWordListener) -> String {
     switch listener.voiceState {
     case "sleeping":
-        return "Sleeping — say Hey Willy"
+        return "Sleeping — say hey jarvis"
     case "speaking":
         return "Speaking"
     case "busy":
@@ -328,6 +440,7 @@ func applyMenuBarState(_ listener: WakeWordListener) {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var stayAwakeActivity: NSObjectProtocol?
+    private var minisBubble: MinisBubblePanel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         stayAwakeActivity = ProcessInfo.processInfo.beginActivity(
@@ -341,9 +454,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "William Agent — always listening", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Listen now", action: #selector(listenNow), keyEquivalent: "l"))
         menu.addItem(NSMenuItem(title: "Wake now", action: #selector(wakeNow), keyEquivalent: "w"))
         menu.addItem(NSMenuItem(title: "Sleep now", action: #selector(sleepNow), keyEquivalent: "s"))
+        menu.addItem(NSMenuItem(title: "Mute voice", action: #selector(toggleMute), keyEquivalent: "m"))
+        menu.addItem(NSMenuItem(title: "Open panel…", action: #selector(openPanel), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem(title: "Toggle Minis bubble", action: #selector(toggleMinisBubble), keyEquivalent: "b"))
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Enroll my voice", action: #selector(enrollVoice), keyEquivalent: "e"))
+        menu.addItem(NSMenuItem(title: "Handle pop-ups now", action: #selector(handlePopupsNow), keyEquivalent: "h"))
         menu.addItem(NSMenuItem(title: "Grant permissions…", action: #selector(grantPermissions), keyEquivalent: "p"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -351,7 +470,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         startServer()
         WakeWordListener.shared.startOnMain()
-        ScreenWatcher.shared.start()
+
+        minisBubble = MinisBubblePanel()
+        minisBubble?.showBubble()
 
         Timer.scheduledTimer(withTimeInterval: 12, repeats: true) { _ in
             WakeWordListener.shared.ensureAwakeOnMain()
@@ -363,8 +484,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WakeWordListener.shared.startOnMain()
     }
 
+    @objc func listenNow() {
+        WakeWordListener.shared.startListeningForCommand()
+    }
+
     @objc func sleepNow() {
         WakeWordListener.shared.enterSleep()
+    }
+
+    @objc func toggleMute() {
+        Voice.setMuted(!Voice.isMuted)
+    }
+
+    @objc func openPanel() {
+        let url = ProcessInfo.processInfo.environment["JARVIS_CORE_URL"] ?? "http://127.0.0.1:8787"
+        if let panel = URL(string: url) {
+            NSWorkspace.shared.open(panel)
+        }
+    }
+
+    @objc func toggleMinisBubble() {
+        guard let bubble = minisBubble else { return }
+        if bubble.isVisible {
+            bubble.hideBubble()
+        } else {
+            bubble.showBubble()
+        }
     }
 
     @objc func enrollVoice() {
@@ -373,6 +518,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func grantPermissions() {
         WakeWordListener.shared.requestPermissionsUserInitiated()
+        ScreenWatcher.shared.promptScreenRecordingAccess()
+        _ = Input.promptAccessibility()
+    }
+
+    @objc func handlePopupsNow() {
+        _ = DialogHandler.handleDialogs()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

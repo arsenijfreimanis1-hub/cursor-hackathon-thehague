@@ -6,7 +6,7 @@
     "onStartup": true
   },
   "contracts": {
-    "hooks": ["inbound_claim"]
+    "hooks": ["inbound_claim", "before_agent_run"]
   },
   "configSchema": {
     "type": "object",

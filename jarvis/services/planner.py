@@ -1,15 +1,44 @@
 import re
 import uuid
 
-from jarvis.services import approvals, event_log, goal_runner, learning, memory, notion_sync, router, security, sessions, task_priority, task_splitter, tasks, worker
+from jarvis.services import (
+    approvals,
+    build_pipeline,
+    event_log,
+    goal_runner,
+    learning,
+    memory,
+    notion_sync,
+    router,
+    screen_hooks,
+    security,
+    sessions,
+    task_priority,
+    task_splitter,
+    tasks,
+    worker,
+)
 
 SENSITIVE_KEYWORDS = ("delete", "deploy", "purchase", "api key", "credential")
 GOAL_PREFIX = re.compile(r"^(?:goal|autonomous goal):\s*", re.I)
+MESSAGING_SOURCES = ("whatsapp:", "telegram:", "signal:", "sms:")
 VOICE_COMMAND_HINTS = (
     "play", "open", "weather", "spotify", "remember", "what", "who", "how",
     "time", "pause", "stop", "skip", "close", "search", "tell", "check",
     "music", "volume", "youtube", "launch", "focus", "goodbye", "thanks",
 )
+
+
+async def _sync_session_to_notion(conversation_id: str, *, source: str) -> None:
+    if not notion_sync.configured():
+        return
+    history = await sessions.get_history(conversation_id, limit=24)
+    if len(history) < 2:
+        return
+    await screen_hooks.on_session_end(
+        conversation_id=conversation_id,
+        messages=[{**m, "source": source} for m in history],
+    )
 
 
 def _looks_like_voice_noise(text: str) -> bool:
@@ -123,6 +152,7 @@ async def handle_message(
     speaker_confidence: float | None = None,
 ) -> dict:
     voice = source == "voice"
+    messaging = source.startswith(MESSAGING_SOURCES)
     conversation_id, is_new_session = await sessions.get_or_create(session_id, source=source, message=text)
     await sessions.add_message(conversation_id, "user", text)
 
@@ -164,6 +194,62 @@ async def handle_message(
             "intent": "ignored",
         }
 
+    build_approval = await build_pipeline.handle_voice_command(text, session_id=conversation_id)
+    if build_approval is not None:
+        if build_approval.get("ok"):
+            phase = build_approval.get("phase", "")
+            if voice:
+                reply = f"Approved, boss. Build is now {phase.replace('_', ' ')}."
+            else:
+                reply = f"Build #{build_approval.get('id', build_approval.get('build_id', ''))} approved — phase: {phase}"
+        else:
+            reply = build_approval.get("error", "Build approval failed.")
+            if voice:
+                reply = f"Couldn't approve, boss. {reply[:60]}"
+        await sessions.add_message(conversation_id, "assistant", reply, engine="build")
+        return {
+            "reply": reply,
+            "engine": "build",
+            "session_id": conversation_id,
+            "build_id": build_approval.get("id") or build_approval.get("build_id"),
+            "intent": "build",
+        }
+
+    if build_pipeline.looks_like_build(text) or build_pipeline.BUILD_PREFIX.match(text.strip()):
+        created = await build_pipeline.create_from_message(
+            text,
+            source=source,
+            session_id=conversation_id,
+        )
+        if not created.get("ok"):
+            reply = created.get("error", "Build failed to start.")
+            if voice:
+                reply = f"Couldn't start the build, boss. {reply[:50]}"
+        elif voice:
+            reply = "Planning your project, boss. I'll show slices for approval."
+        else:
+            reply = (
+                f"Build #{created.get('build_id')} started — phase: {created.get('phase', 'planning')}.\n"
+                f"Review slices at GET /api/builds/{created.get('build_id')}"
+            )
+        await sessions.add_message(conversation_id, "assistant", reply, engine="build")
+        await event_log.log_interaction(
+            source=source,
+            user_message=text,
+            assistant_reply=reply,
+            intent="build",
+            engine="build",
+            conversation_id=conversation_id,
+            metadata={"build_id": created.get("build_id")},
+        )
+        return {
+            "reply": reply,
+            "build_id": created.get("build_id"),
+            "engine": "build",
+            "session_id": conversation_id,
+            "intent": "build",
+        }
+
     goal_match = GOAL_PREFIX.match(text.strip())
     if goal_match:
         prompt = GOAL_PREFIX.sub("", text.strip()).strip()
@@ -173,7 +259,7 @@ async def handle_message(
             if voice:
                 reply = (
                     f"I've drafted a {len(subtasks)}-step plan for approval, boss. "
-                    "Open the kiosk to review and approve it."
+                    "Open the panel to review and approve it."
                 )
             else:
                 lines = "\n".join(f"{i + 1}. {part}" for i, part in enumerate(subtasks))
@@ -262,6 +348,7 @@ async def handle_message(
             voice=voice,
             conversation_id=conversation_id,
             task_id=task["id"],
+            messaging=messaging,
         )
 
         if routed.get("deferred"):
@@ -319,6 +406,9 @@ async def handle_message(
         remember_payload = memory.wants_remember(text)
         if remember_payload and routed.get("intent") != "remember":
             await memory.store(remember_payload, kind="preference", importance=3, source=conversation_id)
+
+        if routed.get("end_session"):
+            await _sync_session_to_notion(conversation_id, source=source)
 
         return {
             "reply": routed["reply"],

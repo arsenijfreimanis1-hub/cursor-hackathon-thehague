@@ -5,7 +5,9 @@ final class OpenWakeWordBridge {
     private var process: Process?
     private var pipe: Pipe?
     private(set) var isRunning = false
+    private var restartWork: DispatchWorkItem?
     var onWakeDetected: (() -> Void)?
+    var onProcessEnded: (() -> Void)?
 
     init(command: String) {
         self.command = command.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -16,14 +18,46 @@ final class OpenWakeWordBridge {
     }
 
     func start() {
-        guard isConfigured, !isRunning else { return }
+        guard isConfigured else { return }
+        restartWork?.cancel()
+        restartWork = nil
+        if isRunning, let process, process.isRunning {
+            return
+        }
+        stop()
+        killOrphanProcesses()
+        launchProcess()
+    }
 
+    func stop() {
+        restartWork?.cancel()
+        restartWork = nil
+        pipe?.fileHandleForReading.readabilityHandler = nil
+        if let process, process.isRunning {
+            process.terminate()
+        }
+        process = nil
+        pipe = nil
+        isRunning = false
+    }
+
+    private func killOrphanProcesses() {
+        let killer = Process()
+        killer.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        killer.arguments = ["-f", "local_voice_openwakeword.py"]
+        try? killer.run()
+        killer.waitUntilExit()
+        Thread.sleep(forTimeInterval: 0.25)
+    }
+
+    private func launchProcess() {
         let process = Process()
         let pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", command]
+        process.arguments = ["-lc", shellCommand()]
         process.standardOutput = pipe
         process.standardError = pipe
+        process.environment = ProcessInfo.processInfo.environment
 
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             guard let self else { return }
@@ -46,6 +80,7 @@ final class OpenWakeWordBridge {
                     self.isRunning = false
                     self.process = nil
                     self.pipe = nil
+                    self.onProcessEnded?()
                 }
             }
         }
@@ -57,16 +92,25 @@ final class OpenWakeWordBridge {
             self.isRunning = true
         } catch {
             self.isRunning = false
+            scheduleRestart(after: 1.5)
         }
     }
 
-    func stop() {
-        pipe?.fileHandleForReading.readabilityHandler = nil
-        if let process, process.isRunning {
-            process.terminate()
+    private func shellCommand() -> String {
+        if command.hasSuffix(".sh") {
+            let escaped = command.replacingOccurrences(of: "\"", with: "\\\"")
+            return "/bin/bash \"\(escaped)\""
         }
-        process = nil
-        pipe = nil
-        isRunning = false
+        return command
+    }
+
+    private func scheduleRestart(after delay: TimeInterval) {
+        restartWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isConfigured, !self.isRunning else { return }
+            self.launchProcess()
+        }
+        restartWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 }

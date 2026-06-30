@@ -9,14 +9,29 @@ final class SpeakerVerifier {
     private let verifyThreshold: Float = 0.62
     private let enrollMinSamples = 8
     private let featureSize = 6
+    private let guidedPhrases = [
+        "Hey Willy",
+        "What time is it",
+        "Open Cursor",
+        "Thanks William",
+        "Remember this for me",
+        "What's the weather",
+        "Stop listening",
+        "Good morning William",
+    ]
 
     private var recentFeatures: [[Float]] = []
     private var enrolledProfile: [Float]?
     private var enrolling = false
     private var enrollBuffer: [[Float]] = []
+    private var guidedActive = false
+    private var guidedIndex = 0
+    private var samplesAtPhraseStart = 0
 
     var isEnrolled: Bool { enrolledProfile != nil }
     var isEnrolling: Bool { enrolling }
+    var isGuidedEnrollment: Bool { guidedActive }
+    var guidedPhraseCount: Int { guidedPhrases.count }
 
     private init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -28,13 +43,55 @@ final class SpeakerVerifier {
 
     func startEnrollment() {
         enrolling = true
+        guidedActive = false
+        guidedIndex = 0
+        samplesAtPhraseStart = 0
+        enrollBuffer.removeAll()
+        recentFeatures.removeAll()
+    }
+
+    func startGuidedEnrollment() {
+        enrolling = true
+        guidedActive = true
+        guidedIndex = 0
+        samplesAtPhraseStart = 0
         enrollBuffer.removeAll()
         recentFeatures.removeAll()
     }
 
     func cancelEnrollment() {
         enrolling = false
+        guidedActive = false
+        guidedIndex = 0
+        samplesAtPhraseStart = 0
         enrollBuffer.removeAll()
+    }
+
+    func currentGuidedPhrase() -> String? {
+        guard guidedActive, guidedIndex < guidedPhrases.count else { return nil }
+        return guidedPhrases[guidedIndex]
+    }
+
+    func samplesSincePhraseStart() -> Int {
+        max(0, enrollBuffer.count - samplesAtPhraseStart)
+    }
+
+    struct GuidedPhraseResult {
+        let samplesGained: Int
+        let done: Bool
+        let nextPhrase: String?
+    }
+
+    func completeGuidedPhrase() -> GuidedPhraseResult {
+        let gained = samplesSincePhraseStart()
+        guidedIndex += 1
+        samplesAtPhraseStart = enrollBuffer.count
+        let done = guidedIndex >= guidedPhrases.count
+        if done {
+            guidedActive = false
+        }
+        let next = done ? nil : guidedPhrases[guidedIndex]
+        return GuidedPhraseResult(samplesGained: gained, done: done, nextPhrase: next)
     }
 
     @discardableResult
@@ -63,7 +120,10 @@ final class SpeakerVerifier {
     }
 
     func verifyRecent() -> (verified: Bool, confidence: Float) {
-        guard let profile = enrolledProfile, !recentFeatures.isEmpty else {
+        guard let profile = enrolledProfile else {
+            return (true, 1.0)
+        }
+        guard recentFeatures.count >= 3 else {
             return (true, 1.0)
         }
         let sample = average(Array(recentFeatures.suffix(12)))
@@ -73,7 +133,7 @@ final class SpeakerVerifier {
 
     func status() -> [String: Any] {
         let result = verifyRecent()
-        return [
+        var payload: [String: Any] = [
             "enrolled": isEnrolled,
             "enrolling": enrolling,
             "enroll_samples": enrollBuffer.count,
@@ -81,7 +141,15 @@ final class SpeakerVerifier {
             "verified": result.verified,
             "confidence": result.confidence,
             "threshold": verifyThreshold,
+            "guided_active": guidedActive,
+            "guided_phrase_index": guidedIndex,
+            "guided_phrase_count": guidedPhrases.count,
+            "guided_phrases": guidedPhrases,
         ]
+        if let phrase = currentGuidedPhrase() {
+            payload["guided_current_phrase"] = phrase
+        }
+        return payload
     }
 
     func clearProfile() {

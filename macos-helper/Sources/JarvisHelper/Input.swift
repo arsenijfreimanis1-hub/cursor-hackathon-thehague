@@ -4,6 +4,8 @@ import CoreGraphics
 import Foundation
 
 enum Input {
+    private static let unicodeChunkSize = 20
+
     static var accessibilityGranted: Bool {
         AXIsProcessTrusted()
     }
@@ -15,18 +17,106 @@ enum Input {
         return ["ok": true, "granted": granted, "prompted": true]
     }
 
-    static func click(x: Double, y: Double) -> [String: Any] {
+    private static func mouseButton(_ name: String) -> CGMouseButton {
+        switch name.lowercased() {
+        case "right": return .right
+        case "middle": return .center
+        default: return .left
+        }
+    }
+
+    private static func mouseDownType(for button: CGMouseButton) -> CGEventType {
+        switch button {
+        case .right: return .rightMouseDown
+        case .center: return .otherMouseDown
+        default: return .leftMouseDown
+        }
+    }
+
+    private static func mouseUpType(for button: CGMouseButton) -> CGEventType {
+        switch button {
+        case .right: return .rightMouseUp
+        case .center: return .otherMouseUp
+        default: return .leftMouseUp
+        }
+    }
+
+    static func moveMouse(x: Double, y: Double) -> [String: Any] {
         guard accessibilityGranted else {
             return ["ok": false, "error": "Enable Accessibility for JarvisHelper in System Settings"]
         }
         let point = CGPoint(x: x, y: y)
-        guard let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left),
-              let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left) else {
+        guard let move = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .mouseMoved,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) else {
+            return ["ok": false, "error": "could not create mouse event"]
+        }
+        move.post(tap: .cghidEventTap)
+        return ["ok": true, "x": x, "y": y]
+    }
+
+    static func mouseDown(x: Double, y: Double, button: String = "left") -> [String: Any] {
+        guard accessibilityGranted else {
+            return ["ok": false, "error": "Enable Accessibility for JarvisHelper in System Settings"]
+        }
+        let mouseButton = mouseButton(button)
+        let point = CGPoint(x: x, y: y)
+        guard let down = CGEvent(
+            mouseEventSource: nil,
+            mouseType: mouseDownType(for: mouseButton),
+            mouseCursorPosition: point,
+            mouseButton: mouseButton
+        ) else {
+            return ["ok": false, "error": "could not create mouse event"]
+        }
+        down.post(tap: .cghidEventTap)
+        return ["ok": true, "x": x, "y": y, "button": button]
+    }
+
+    static func mouseUp(x: Double, y: Double, button: String = "left") -> [String: Any] {
+        guard accessibilityGranted else {
+            return ["ok": false, "error": "Enable Accessibility for JarvisHelper in System Settings"]
+        }
+        let mouseButton = mouseButton(button)
+        let point = CGPoint(x: x, y: y)
+        guard let up = CGEvent(
+            mouseEventSource: nil,
+            mouseType: mouseUpType(for: mouseButton),
+            mouseCursorPosition: point,
+            mouseButton: mouseButton
+        ) else {
+            return ["ok": false, "error": "could not create mouse event"]
+        }
+        up.post(tap: .cghidEventTap)
+        return ["ok": true, "x": x, "y": y, "button": button]
+    }
+
+    static func click(x: Double, y: Double, button: String = "left") -> [String: Any] {
+        guard accessibilityGranted else {
+            return ["ok": false, "error": "Enable Accessibility for JarvisHelper in System Settings"]
+        }
+        let mouseButton = mouseButton(button)
+        let point = CGPoint(x: x, y: y)
+        guard let down = CGEvent(
+            mouseEventSource: nil,
+            mouseType: mouseDownType(for: mouseButton),
+            mouseCursorPosition: point,
+            mouseButton: mouseButton
+        ),
+        let up = CGEvent(
+            mouseEventSource: nil,
+            mouseType: mouseUpType(for: mouseButton),
+            mouseCursorPosition: point,
+            mouseButton: mouseButton
+        ) else {
             return ["ok": false, "error": "could not create mouse event"]
         }
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
-        return ["ok": true, "x": x, "y": y]
+        return ["ok": true, "x": x, "y": y, "button": button]
     }
 
     static func typeText(_ text: String) -> [String: Any] {
@@ -37,17 +127,23 @@ enum Input {
             return ["ok": false, "error": "empty text"]
         }
         let source = CGEventSource(stateID: .hidSystemState)
-        text.unicodeScalars.forEach { scalar in
-            var chars = [UniChar(scalar.value)]
-            if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
-                keyDown.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
-                keyUp.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
-                keyDown.post(tap: .cghidEventTap)
-                keyUp.post(tap: .cghidEventTap)
+        let chars = Array(text.unicodeScalars.map { UniChar($0.value) })
+        var offset = 0
+        while offset < chars.count {
+            let end = min(offset + unicodeChunkSize, chars.count)
+            var chunk = Array(chars[offset..<end])
+            let length = chunk.count
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+                return ["ok": false, "error": "could not create key event"]
             }
+            keyDown.keyboardSetUnicodeString(stringLength: length, unicodeString: &chunk)
+            keyUp.keyboardSetUnicodeString(stringLength: length, unicodeString: &chunk)
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+            offset = end
         }
-        return ["ok": true, "length": text.count]
+        return ["ok": true, "length": text.count, "events": (chars.count + unicodeChunkSize - 1) / unicodeChunkSize]
     }
 
     static func pressKey(_ key: String, modifiers: [String] = []) -> [String: Any] {

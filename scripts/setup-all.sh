@@ -91,8 +91,8 @@ else
   warn "openclaw not installed — WhatsApp bridge skipped (npm install -g openclaw)"
 fi
 
-# 4c. Kiosk
-./scripts/install-kiosk.sh 2>/dev/null || warn "Kiosk install skipped"
+# 4c. Retire separate kiosk — JarvisHelper menubar + web panel are the unified UI
+./scripts/uninstall-kiosk.sh 2>/dev/null || warn "Kiosk uninstall skipped"
 
 # 5. Memory & server stack
 ./scripts/setup-memory-server.sh 2>/dev/null || warn "Memory/server setup partial — run ./scripts/setup-memory-server.sh"
@@ -106,6 +106,7 @@ if [[ "$VOICE_BACKEND" != "local_openwakeword_whisper" ]]; then
   open "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition" 2>/dev/null || true
 fi
 open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" 2>/dev/null || true
+open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture" 2>/dev/null || true
 
 # 6. Health check
 sleep 3

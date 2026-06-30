@@ -45,6 +45,15 @@ async def _answer_from_facts(text: str, *, action_system: str) -> tuple[str, str
 
 
 async def execute_task(task: dict) -> dict:
+    from jarvis.services import vigil_metrics
+
+    text = task.get("body") or task.get("title") or ""
+    task_id = task["id"]
+    async with vigil_metrics.track_tool("orchestrator.execute_task", task_id=task_id):
+        return await _execute_task_inner(task)
+
+
+async def _execute_task_inner(task: dict) -> dict:
     text = task.get("body") or task.get("title") or ""
     task_id = task["id"]
     await tasks.update_task_status(task_id, "running")

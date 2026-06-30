@@ -1,11 +1,14 @@
 import asyncio
 import json
+import logging
 import os
 
-from cursor_sdk import Agent, AgentOptions, CursorAgentError, LocalAgentOptions
+from cursor_sdk import Agent, AgentOptions, CloudAgentOptions, CloudRepository, CursorAgentError, LocalAgentOptions
 
 from jarvis.config import settings
-from jarvis.services import skills
+from jarvis.services import mcp_config, skill_domains, skills
+
+log = logging.getLogger("jarvis.cursor_agent")
 
 COMPLEX_HINTS = (
     "build app",
@@ -62,14 +65,58 @@ def should_reason(text: str) -> bool:
     return any(hint in lowered for hint in REASON_HINTS) or len(text) > 200
 
 
-def _cursor_prompt(prompt: str, cwd: str, api_key: str, model: str) -> dict:
+def _agent_options(
+    *,
+    api_key: str,
+    model: str,
+    cwd: str | None = None,
+    repo_url: str | None = None,
+    branch: str | None = None,
+    runtime: str = "local",
+) -> AgentOptions:
+    mcp_servers = mcp_config.load_mcp_servers()
+    if runtime == "cloud" and repo_url:
+        opts = AgentOptions(
+            api_key=api_key,
+            model=model,
+            cloud=CloudAgentOptions(
+                repos=[CloudRepository(url=repo_url, starting_ref=branch or "main")],
+                auto_create_pr=False,
+                work_on_current_branch=True,
+            ),
+        )
+        if mcp_servers:
+            return AgentOptions(api_key=api_key, model=model, cloud=opts.cloud, mcp_servers=mcp_servers)
+        return opts
+    local_opts = LocalAgentOptions(
+        cwd=cwd or str(settings.workspace_dir),
+        setting_sources=["project", "user"],
+    )
+    if mcp_servers:
+        return AgentOptions(api_key=api_key, model=model, local=local_opts, mcp_servers=mcp_servers)
+    return AgentOptions(api_key=api_key, model=model, local=local_opts)
+
+
+def _cursor_prompt(
+    prompt: str,
+    api_key: str,
+    model: str,
+    *,
+    cwd: str | None = None,
+    repo_url: str | None = None,
+    branch: str | None = None,
+    runtime: str = "local",
+) -> dict:
     try:
         result = Agent.prompt(
             prompt,
-            AgentOptions(
+            _agent_options(
                 api_key=api_key,
                 model=model,
-                local=LocalAgentOptions(cwd=cwd, setting_sources=[]),
+                cwd=cwd,
+                repo_url=repo_url,
+                branch=branch,
+                runtime=runtime,
             ),
         )
         return {
@@ -77,12 +124,22 @@ def _cursor_prompt(prompt: str, cwd: str, api_key: str, model: str) -> dict:
             "status": result.status,
             "result": result.result or "",
             "run_id": getattr(result, "id", None),
+            "runtime": runtime,
         }
     except CursorAgentError as exc:
-        return {"ok": False, "error": str(exc), "retryable": exc.is_retryable}
+        return {"ok": False, "error": str(exc), "retryable": exc.is_retryable, "runtime": runtime}
 
 
-def _cursor_run_traced(prompt: str, cwd: str, api_key: str, model: str) -> dict:
+def _cursor_run_traced(
+    prompt: str,
+    api_key: str,
+    model: str,
+    *,
+    cwd: str | None = None,
+    repo_url: str | None = None,
+    branch: str | None = None,
+    runtime: str = "local",
+) -> dict:
     """Run via Agent.create and collect thinking + assistant + tool messages."""
     from jarvis.services import cursor_trace
 
@@ -90,10 +147,13 @@ def _cursor_run_traced(prompt: str, cwd: str, api_key: str, model: str) -> dict:
     agent_id: str | None = None
     try:
         with Agent.create(
-            AgentOptions(
+            _agent_options(
                 api_key=api_key,
                 model=model,
-                local=LocalAgentOptions(cwd=cwd, setting_sources=[]),
+                cwd=cwd,
+                repo_url=repo_url,
+                branch=branch,
+                runtime=runtime,
             ),
         ) as agent:
             agent_id = getattr(agent, "id", None) or getattr(agent, "agent_id", None)
@@ -110,6 +170,7 @@ def _cursor_run_traced(prompt: str, cwd: str, api_key: str, model: str) -> dict:
                 "run_id": terminal.id,
                 "agent_id": agent_id,
                 "events": events,
+                "runtime": runtime,
             }
     except CursorAgentError as exc:
         return {
@@ -159,8 +220,16 @@ async def _screen_context_block(query: str | None = None) -> str:
     return f"\n\nSCREEN CONTEXT:\n{block}" if block else ""
 
 
-async def _build_full_prompt(prompt: str) -> str:
-    skill_block = skills.load_skills_block()
+async def _build_full_prompt(
+    prompt: str,
+    *,
+    domains: list[skill_domains.SkillDomain] | None = None,
+) -> str:
+    detected = domains or skill_domains.detect_domains(prompt)
+    skill_block = skills.load_skills_block(
+        domains=detected or None,
+        include_external=bool(detected),
+    )
     screen_block = await _screen_context_block(prompt)
     full_prompt = CURSOR_RULES
     if skill_block:
@@ -179,6 +248,10 @@ async def run(
     source: str = "cursor_agent",
     handle_popups: bool = True,
     trace: bool | None = None,
+    runtime: str | None = None,
+    repo_url: str | None = None,
+    branch: str | None = None,
+    domains: list[skill_domains.SkillDomain] | None = None,
 ) -> dict:
     api_key = settings.resolved_cursor_api_key()
     if not api_key:
@@ -187,12 +260,16 @@ async def run(
             "error": "CURSOR_API_KEY not set — add to ~/.jarvis-core/.env or export it",
         }
     workdir = cwd or str(settings.workspace_dir)
-    full_prompt = await _build_full_prompt(prompt)
+    rt = (runtime or "local").lower()
+    if rt == "cloud" and not repo_url:
+        return {"ok": False, "error": "cloud runtime requires repo_url"}
+    full_prompt = await _build_full_prompt(prompt, domains=domains)
     use_trace = settings.cursor_trace_enabled if trace is None else trace
+    use_popups = handle_popups and settings.popup_handler_enabled and rt == "local"
 
     popup_note = ""
     pre: dict = {"ok": True, "handled": False}
-    if handle_popups and settings.popup_handler_enabled:
+    if use_popups:
         from jarvis.services import popup_handler
 
         pre = await popup_handler.handle_popups(full_control=True)
@@ -201,18 +278,24 @@ async def run(
             popup_note = f"\n\nSYSTEM: A dialog was dismissed before your run ({', '.join(titles) or 'popup'}). Continue."
 
     runner = _cursor_run_traced if use_trace else _cursor_prompt
+    run_kwargs = {
+        "cwd": workdir,
+        "repo_url": repo_url,
+        "branch": branch,
+        "runtime": rt,
+    }
     result = await asyncio.to_thread(
         runner,
         full_prompt + popup_note,
-        workdir,
         api_key,
         model or settings.cursor_model,
+        **run_kwargs,
     )
 
     if use_trace:
         await _persist_trace(prompt=prompt, source=source, result=result)
 
-    if handle_popups and settings.popup_handler_enabled:
+    if use_popups:
         from jarvis.services import popup_handler
 
         post = await popup_handler.handle_popups(full_control=True)
@@ -226,9 +309,9 @@ async def run(
             followup = await asyncio.to_thread(
                 _cursor_run_traced if use_trace else _cursor_prompt,
                 await _build_full_prompt(reprompt),
-                workdir,
                 api_key,
                 model or settings.cursor_model,
+                **run_kwargs,
             )
             if use_trace:
                 await _persist_trace(prompt=reprompt, source=f"{source}_reprompt", result=followup)
@@ -240,10 +323,24 @@ async def run(
 
 
 async def run_reasoning(text: str, *, context: str = "") -> dict:
+    """Short voice/web answers — prefer Vigil Anthropic proxy when configured."""
+    from jarvis.services import vigil_proxy
+
     prompt = f"Question: {text}\n"
     if context:
         prompt += f"\nGrounding context:\n{context}\n"
     prompt += "\nAnswer in one short sentence for voice."
+
+    if vigil_proxy.configured():
+        try:
+            reply = await vigil_proxy.chat(
+                system=CURSOR_RULES,
+                prompt=prompt,
+            )
+            return {"ok": True, "result": reply, "engine": "vigil-anthropic"}
+        except Exception as exc:
+            log.warning("vigil reasoning failed, falling back to cursor: %s", exc)
+
     return await run(prompt, handle_popups=False)
 
 

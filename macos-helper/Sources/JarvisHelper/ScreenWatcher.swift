@@ -1,13 +1,16 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import Vision
 
-/// Always-on screen observer — captures frontmost app context, deduplicates frames, OCRs locally.
+/// Opt-in screen capture layer — JarvisHelper owns capture; Notion only receives summaries via JarvisCore.
+/// Starts paused; only runs when explicitly resumed (screen share mode).
+/// Never call CGRequestScreenCaptureAccess() from the capture timer (causes repeated system popups).
 final class ScreenWatcher {
     static let shared = ScreenWatcher()
 
     private var timer: Timer?
-    private var paused = false
+    private var paused = true
     private var lastPhash: String?
     private var lastOcrText: String = ""
     private var lastApp: String = ""
@@ -17,6 +20,15 @@ final class ScreenWatcher {
     private var skippedCount = 0
     private var lastPostAt = Date.distantPast
     private var lastError: String?
+    private var lastPermissionPromptAt = Date.distantPast
+    private var screenCaptureDeniedLogged = false
+
+    private var screenCaptureGranted: Bool {
+        if #available(macOS 10.15, *) {
+            return CGPreflightScreenCaptureAccess()
+        }
+        return true
+    }
 
     private let excludedBundleIds: Set<String> = [
         "com.1password.1password", "com.agilebits.onepassword7",
@@ -40,8 +52,8 @@ final class ScreenWatcher {
     }
 
     private var enabled: Bool {
-        let raw = (ProcessInfo.processInfo.environment["JARVIS_SCREEN_WATCH_ENABLED"] ?? "true").lowercased()
-        return raw != "false" && raw != "0"
+        let raw = (ProcessInfo.processInfo.environment["JARVIS_SCREEN_WATCH_ENABLED"] ?? "false").lowercased()
+        return raw == "true" || raw == "1"
     }
 
     func status() -> [String: Any] {
@@ -56,6 +68,7 @@ final class ScreenWatcher {
             "last_app": lastApp,
             "last_window": lastWindowTitle,
             "last_error": lastError as Any,
+            "screen_capture_granted": screenCaptureGranted,
         ]
     }
 
@@ -75,10 +88,16 @@ final class ScreenWatcher {
 
     func pause() {
         paused = true
+        timer?.invalidate()
+        timer = nil
     }
 
     func resume() {
+        guard enabled else { return }
         paused = false
+        if timer == nil {
+            start()
+        }
     }
 
     func stop() {
@@ -89,6 +108,14 @@ final class ScreenWatcher {
 
     private func tick() {
         guard !paused else { return }
+        guard screenCaptureGranted else {
+            lastError = "screen recording not granted"
+            if !screenCaptureDeniedLogged {
+                screenCaptureDeniedLogged = true
+            }
+            return
+        }
+        screenCaptureDeniedLogged = false
         guard let app = NSWorkspace.shared.frontmostApplication else { return }
         let bundleId = app.bundleIdentifier ?? ""
         if excludedBundleIds.contains(bundleId) {
@@ -237,5 +264,20 @@ final class ScreenWatcher {
 
     private func phashSimilar(_ a: String, _ b: String) -> Bool {
         a == b
+    }
+
+    /// User-initiated only — do not call from the capture timer (causes repeated system popups).
+    func promptScreenRecordingAccess() {
+        let now = Date()
+        guard now.timeIntervalSince(lastPermissionPromptAt) > 30 else { return }
+        lastPermissionPromptAt = now
+
+        if #available(macOS 10.15, *), !CGPreflightScreenCaptureAccess() {
+            _ = CGRequestScreenCaptureAccess()
+        }
+
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }

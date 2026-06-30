@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import queue
+import signal
 import sys
 import time
 
@@ -21,6 +22,14 @@ def main() -> int:
     sample_rate = 16000
     chunk_size = 1280
     cooldown_seconds = float(os.environ.get("WILLIAM_OPENWAKEWORD_COOLDOWN_SECONDS", "2.0"))
+    stop_requested = False
+
+    def handle_signal(_signum, _frame):  # noqa: ANN001
+        nonlocal stop_requested
+        stop_requested = True
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
 
     kwargs: dict = {"inference_framework": "onnx"}
     if model_path:
@@ -44,14 +53,18 @@ def main() -> int:
         callback=callback,
     ):
         print("OPENWAKEWORD_READY", flush=True)
-        while True:
-            chunk = audio_q.get()
+        while not stop_requested:
+            try:
+                chunk = audio_q.get(timeout=0.5)
+            except queue.Empty:
+                continue
             predictions = model.predict(chunk)
             now = time.monotonic()
             for _, score in predictions.items():
                 if score >= threshold and now - last_detection >= cooldown_seconds:
                     last_detection = now
                     print("WAKE_DETECTED", flush=True)
+    return 0
 
 
 if __name__ == "__main__":

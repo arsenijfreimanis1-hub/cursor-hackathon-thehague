@@ -79,6 +79,8 @@ final class WakeWordListener: NSObject {
     private var silenceWaitStartedAt = Date.distantPast
     private let maxSilenceWait: TimeInterval = 2.5
     private var localTranscribing = false
+    private var guidedEnrollmentActive = false
+    private var guidedPhraseRetries = 0
 
     var isActive = false
     var statusMessage = "initialising"
@@ -94,6 +96,13 @@ final class WakeWordListener: NSObject {
     var isSleeping: Bool { sleepMode }
     var voiceBackendName: String { voiceConfig.backend.rawValue }
     private var usesLocalBackend: Bool { voiceConfig.usesLocalPipeline }
+    var wakePhraseDisplay: String { usesLocalBackend ? "hey jarvis" : "hey willy" }
+    var wakePhraseHint: String {
+        usesLocalBackend
+            ? "Say \"hey jarvis\" to wake William (local wake model)."
+            : "Say \"hey willy\" to wake William."
+    }
+    var usesLocalVoiceBackend: Bool { usesLocalBackend }
 
     /// Canonical voice state for UIs — mirrors jarvis/services/voice_state.py
     var voiceState: String {
@@ -115,6 +124,10 @@ final class WakeWordListener: NSObject {
         if usesLocalBackend {
             if pausedForSpeech || Voice.isSpeaking || localTranscribing { return true }
             if localRecorder.isRecording { return true }
+            if guidedEnrollmentActive || SpeakerVerifier.shared.isGuidedEnrollment { return true }
+            if wakeBridge.isConfigured && !wakeBridge.isRunning && !sleepMode && !busy {
+                startLocalWakeMonitoring()
+            }
             return wakeBridge.isRunning || conversationMode || awaitingCommand
         }
         guard speechRecognizer?.isAvailable == true else { return false }
@@ -778,8 +791,16 @@ final class WakeWordListener: NSObject {
 
     private func startLocalWakeMonitoring() {
         guard usesLocalBackend, !pausedForSpeech, !Voice.isSpeaking, !busy, !localRecorder.isRecording, !localTranscribing else { return }
+        guard !guidedEnrollmentActive, !SpeakerVerifier.shared.isGuidedEnrollment else { return }
         wakeBridge.onWakeDetected = { [weak self] in
             self?.handleLocalWakeDetected()
+        }
+        wakeBridge.onProcessEnded = { [weak self] in
+            guard let self else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                guard self.isActive, !self.busy, !self.sleepMode, !self.guidedEnrollmentActive else { return }
+                self.startLocalWakeMonitoring()
+            }
         }
         wakeBridge.start()
         audioRunning = wakeBridge.isRunning || localRecorder.isRecording
@@ -788,6 +809,9 @@ final class WakeWordListener: NSObject {
             statusMessage = "openwakeword command not configured"
             lastAction = "set WILLIAM_OPENWAKEWORD_COMMAND"
             return
+        }
+        if wakeBridge.isConfigured && !wakeBridge.isRunning {
+            lastAction = "wake monitor starting"
         }
         isActive = true
         if !sleepMode && !conversationMode && !awaitingCommand {
@@ -814,7 +838,9 @@ final class WakeWordListener: NSObject {
         pendingCommand = ""
         lastAction = "wake detected"
         Sound.listening()
-        beginLocalCommandCapture(reason: "wake")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.beginLocalCommandCapture(reason: "wake")
+        }
     }
 
     private func beginLocalCommandCapture(reason: String) {
@@ -827,6 +853,13 @@ final class WakeWordListener: NSObject {
             return
         }
         stopLocalWakeMonitoring()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.startLocalCommandRecorder(reason: reason)
+        }
+    }
+
+    private func startLocalCommandRecorder(reason: String) {
+        guard usesLocalBackend, !localTranscribing, !busy, !Voice.isSpeaking else { return }
         awaitingCommand = true
         audioRunning = true
         statusMessage = "recording"
@@ -957,6 +990,7 @@ final class WakeWordListener: NSObject {
             refreshConversationTimer()
         }
         if usesLocalBackend && conversationMode && !sleepMode {
+            Sound.listening()
             beginLocalCommandCapture(reason: "follow up")
         } else {
             healSession()
@@ -972,6 +1006,7 @@ final class WakeWordListener: NSObject {
             refreshConversationTimer()
         }
         if usesLocalBackend && conversationMode && !sleepMode {
+            Sound.listening()
             beginLocalCommandCapture(reason: "follow up")
         } else {
             healSession()
@@ -1283,7 +1318,7 @@ final class WakeWordListener: NSObject {
             return
         }
 
-        if SpeakerVerifier.shared.isEnrolled {
+        if SpeakerVerifier.shared.isEnrolled, !SpeakerVerifier.shared.isGuidedEnrollment, !guidedEnrollmentActive {
             let check = SpeakerVerifier.shared.verifyRecent()
             if !check.verified {
                 busy = true
@@ -1303,6 +1338,7 @@ final class WakeWordListener: NSObject {
         commandDeadline?.cancel()
         lastAction = "command: \(command)"
         Sound.notListening()
+        Sound.responding()
         recognitionTask?.cancel()
         armCommandTimeout()
 
@@ -1379,17 +1415,123 @@ final class WakeWordListener: NSObject {
     }
 
     func startVoiceEnrollment() {
-        DispatchQueue.main.async { self.handleVoiceEnrollment() }
+        DispatchQueue.main.async { self.startGuidedVoiceEnrollment() }
+    }
+
+    func startGuidedVoiceEnrollment() {
+        guard !busy, !guidedEnrollmentActive else { return }
+        busy = true
+        isBusy = true
+        guidedEnrollmentActive = true
+        guidedPhraseRetries = 0
+        stopLocalWakeMonitoring()
+        SpeakerVerifier.shared.startGuidedEnrollment()
+        lastAction = "guided voice enrollment started"
+        statusMessage = "voice training"
+        promptGuidedPhrase(isFirst: true)
+    }
+
+    func cancelGuidedVoiceEnrollment() {
+        guidedEnrollmentActive = false
+        guidedPhraseRetries = 0
+        SpeakerVerifier.shared.cancelEnrollment()
+        statusMessage = sleepMode ? "sleeping" : "listening"
+        lastAction = "voice enrollment cancelled"
+        finishBusyAndListen()
+    }
+
+    private func promptGuidedPhrase(isFirst: Bool = false, retry: Bool = false) {
+        guard guidedEnrollmentActive,
+              let phrase = SpeakerVerifier.shared.currentGuidedPhrase() else {
+            completeGuidedEnrollment()
+            return
+        }
+        let index = SpeakerVerifier.shared.guidedPhraseCount > 0
+            ? min(SpeakerVerifier.shared.status()["guided_phrase_index"] as? Int ?? 0, SpeakerVerifier.shared.guidedPhraseCount - 1) + 1
+            : 1
+        let total = SpeakerVerifier.shared.guidedPhraseCount
+        let intro = isFirst
+            ? "Right boss. I'll learn your voice. Repeat each phrase after me. "
+            : ""
+        let retryMsg = retry ? "Let's try that once more. " : ""
+        let spoken = "\(intro)\(retryMsg)Phrase \(index) of \(total). \(phrase)."
+        Voice.speak(spoken) { [weak self] in
+            self?.recordGuidedPhrase()
+        }
+    }
+
+    private func recordGuidedPhrase() {
+        guard guidedEnrollmentActive else { return }
+        statusMessage = "voice training — listening"
+        do {
+            try localRecorder.start(
+                maxDuration: 5.0,
+                silenceCutoff: 1.2,
+                silenceThreshold: voiceConfig.silenceThreshold
+            ) { [weak self] result in
+                guard let self else { return }
+                if case .success(let url) = result {
+                    try? FileManager.default.removeItem(at: url)
+                }
+                self.handleGuidedPhraseRecorded()
+            }
+        } catch {
+            lastAction = "enrollment record failed: \(error.localizedDescription)"
+            Voice.speak("Sorry boss, the microphone glitched. Let's try that phrase again.") { [weak self] in
+                self?.promptGuidedPhrase(retry: true)
+            }
+        }
+    }
+
+    private func handleGuidedPhraseRecorded() {
+        let gained = SpeakerVerifier.shared.samplesSincePhraseStart()
+        if gained >= 2 {
+            guidedPhraseRetries = 0
+            let result = SpeakerVerifier.shared.completeGuidedPhrase()
+            if result.done {
+                completeGuidedEnrollment()
+            } else {
+                promptGuidedPhrase()
+            }
+            return
+        }
+
+        if guidedPhraseRetries < 1 {
+            guidedPhraseRetries += 1
+            promptGuidedPhrase(retry: true)
+            return
+        }
+
+        guidedPhraseRetries = 0
+        let result = SpeakerVerifier.shared.completeGuidedPhrase()
+        if result.done {
+            completeGuidedEnrollment(force: true)
+        } else {
+            promptGuidedPhrase()
+        }
+    }
+
+    private func completeGuidedEnrollment(force: Bool = false) {
+        guidedEnrollmentActive = false
+        let ok = SpeakerVerifier.shared.finishEnrollment()
+        let wake = self.wakePhraseDisplay
+        let msg: String
+        if ok {
+            msg = "Perfect boss. I've learned your voice. Say \(wake) to wake me, then give me a command."
+        } else if force {
+            msg = "I got some of your voice, boss, but not enough. Say teach my voice to try again."
+        } else {
+            msg = "I got some of your voice, boss, but not enough. Say teach my voice to try again."
+        }
+        lastAction = ok ? "guided voice enrollment complete" : "guided voice enrollment incomplete"
+        statusMessage = sleepMode ? "sleeping" : "listening"
+        Voice.speak(msg) { [weak self] in
+            self?.finishBusyAndListen()
+        }
     }
 
     private func handleVoiceEnrollment() {
-        busy = true
-        isBusy = true
-        SpeakerVerifier.shared.startEnrollment()
-        lastAction = "voice enrollment started"
-        Voice.speak("Right, boss. Talk for a few seconds so I learn your voice.") { [weak self] in
-            self?.finishBusyAndListen()
-        }
+        startGuidedVoiceEnrollment()
     }
 
     private func queryJarvis(

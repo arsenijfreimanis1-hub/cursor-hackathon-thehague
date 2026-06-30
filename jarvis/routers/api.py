@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from jarvis.config import settings
@@ -15,19 +16,24 @@ from jarvis.services import (
     learning,
     macos,
     memory,
+    minis,
+    minis_ops,
     netatmo,
     notion_sync,
     ollama,
     openclaw,
     people,
     planner,
+    remote_control,
     scheduler,
     screen_observer,
     security,
     self_modify,
     sessions,
+    skills,
     tasks,
     terminal,
+    vigil_metrics,
     voice_state,
     worker,
 )
@@ -65,6 +71,39 @@ class FullAccessRequest(BaseModel):
     enabled: bool
 
 
+class RemoteControlRequest(BaseModel):
+    enabled: bool
+
+
+class RemotePointRequest(BaseModel):
+    x: float
+    y: float
+    button: str = "left"
+
+
+class RemoteTypeRequest(BaseModel):
+    text: str
+
+
+class RemoteKeyRequest(BaseModel):
+    key: str
+    modifiers: list[str] = Field(default_factory=list)
+
+
+class ScreenShareRequest(BaseModel):
+    enabled: bool
+
+
+class MinisInputRequest(BaseModel):
+    type: str
+    x: float
+    y: float
+
+
+class MinisRestartRequest(BaseModel):
+    target: str = "both"
+
+
 class TerminalRequest(BaseModel):
     command: str
 
@@ -72,6 +111,21 @@ class TerminalRequest(BaseModel):
 class CreateGoalRequest(BaseModel):
     prompt: str = Field(min_length=3)
     source: str = "web"
+
+
+class CreateBuildRequest(BaseModel):
+    prompt: str = Field(min_length=3)
+    source: str = "web"
+    workspace_path: str | None = None
+    session_id: str | None = None
+
+
+class ApproveMicroPromptsRequest(BaseModel):
+    edits: list[dict] | None = None
+
+
+class RevisePrdRequest(BaseModel):
+    feedback: str = Field(min_length=1)
 
 
 class AgentRuntimeRequest(BaseModel):
@@ -126,6 +180,7 @@ async def dashboard():
         "macos_helper": helper_status,
         "worker": worker.status(),
         "security": await security.status(),
+        "remote_control": await remote_control.status(),
         "openclaw": await openclaw.health(),
         "tasks_active": active + queued,
         "approvals_pending": pending_approvals,
@@ -150,8 +205,55 @@ async def health():
         "scheduler": scheduler.status(),
         "worker": worker.status(),
         "security": security_status,
+        "remote_control": await remote_control.status(),
+        "vigil": vigil_metrics.status(),
+        "skills": {
+            "external_enabled": settings.external_skills_enabled,
+            "installed": skills.list_installed_skills(),
+        },
         "port": settings.port,
     }
+
+
+@router.get("/skills")
+async def list_skills():
+    return {
+        "external_enabled": settings.external_skills_enabled,
+        "skills": skills.list_installed_skills(),
+    }
+
+
+@router.get("/vigil/status")
+async def vigil_status():
+    from jarvis.services import vigil_proxy
+
+    return {"metrics": vigil_metrics.status(), "proxy": vigil_proxy.status()}
+
+
+@router.post("/vigil/test-signal")
+async def vigil_test_signal(message: str = "William Agent test ping"):
+    if not vigil_metrics.configured():
+        return {
+            "ok": False,
+            "error": "Vigil Cloud API key (vgl_...) required for signals — the api.vigil.wtf URL is an LLM proxy, not a signal endpoint.",
+            **vigil_metrics.status(),
+        }
+    vigil_metrics.emit_signal(message, signal_type="observation", metadata={"source": "api_test"})
+    return {"ok": True, "queued": True, **vigil_metrics.status()}
+
+
+@router.post("/vigil/test-chat")
+async def vigil_test_chat(message: str = "Hello from William Agent"):
+    from jarvis.services import vigil_proxy
+
+    st = vigil_proxy.status()
+    if not vigil_proxy.configured():
+        return {"ok": False, "error": "Vigil proxy not ready", "status": st}
+    try:
+        reply = await vigil_proxy.chat(prompt=message, system="Reply in one short sentence.")
+        return {"ok": True, "reply": reply, "status": st}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "status": st}
 
 
 @router.post("/chat")
@@ -257,6 +359,21 @@ async def ensure_voice_awake():
 @router.post("/voice/sleep")
 async def voice_sleep():
     return await macos.sleep_voice()
+
+
+@router.post("/voice/enroll/start")
+async def voice_enroll_start():
+    return await macos.start_guided_voice_enrollment()
+
+
+@router.get("/voice/enroll/status")
+async def voice_enroll_status():
+    return await macos.voice_enrollment_status()
+
+
+@router.post("/voice/enroll/cancel")
+async def voice_enroll_cancel():
+    return await macos.cancel_voice_enrollment()
 
 
 @router.get("/goals/{goal_id}")
@@ -368,6 +485,102 @@ async def approve_goal(goal_id: int):
     return result
 
 
+@router.get("/builds")
+async def list_builds(limit: int = 20):
+    from jarvis.services import build_pipeline
+
+    return {"builds": await build_pipeline.list_builds(limit=limit)}
+
+
+@router.post("/builds")
+async def create_build(req: CreateBuildRequest):
+    from jarvis.services import build_pipeline
+
+    created = await build_pipeline.start(
+        req.prompt,
+        source=req.source,
+        workspace_path=req.workspace_path,
+        session_id=req.session_id,
+    )
+    if not created.get("ok"):
+        raise HTTPException(status_code=400, detail=created.get("error", "build failed"))
+    return created
+
+
+@router.get("/builds/{build_id}")
+async def get_build(build_id: int):
+    from jarvis.services import build_pipeline
+
+    detail = await build_pipeline.get_build_detail(build_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="build not found")
+    return detail
+
+
+@router.post("/builds/{build_id}/approve-micro-prompts")
+async def approve_build_micro_prompts(build_id: int, req: ApproveMicroPromptsRequest | None = None):
+    from jarvis.services import build_pipeline
+
+    result = await build_pipeline.approve_micro_prompts(
+        build_id,
+        edits=req.edits if req else None,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "approve failed"))
+    return result
+
+
+@router.post("/builds/{build_id}/approve-prd")
+async def approve_build_prd(build_id: int):
+    from jarvis.services import build_pipeline
+
+    result = await build_pipeline.approve_prd(build_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "approve failed"))
+    return result
+
+
+@router.post("/builds/{build_id}/revise-prd")
+async def revise_build_prd(build_id: int, req: RevisePrdRequest):
+    from jarvis.services import build_pipeline
+
+    result = await build_pipeline.revise_prd(build_id, req.feedback)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "revise failed"))
+    return result
+
+
+@router.post("/builds/{build_id}/stop")
+async def stop_build(build_id: int):
+    from jarvis.services import build_pipeline
+
+    return await build_pipeline.stop(build_id)
+
+
+@router.get("/github/status")
+async def github_status():
+    from jarvis.services import compute_fleet, github_sync
+
+    return {
+        "configured": github_sync.configured(),
+        "hub_repo": github_sync.hub_repo_url() if github_sync.configured() else None,
+        "owner": github_sync.resolved_owner() if github_sync.configured() else None,
+        "fleet": await compute_fleet.fleet_status(),
+    }
+
+
+@router.post("/github/sync")
+async def github_sync_now():
+    from jarvis.services import github_sync, state_export
+
+    if not github_sync.configured():
+        raise HTTPException(status_code=400, detail="GitHub not configured")
+    result = await state_export.export_all()
+    if not result.get("ok"):
+        raise HTTPException(status_code=500, detail=result.get("error", "sync failed"))
+    return result
+
+
 @router.get("/security")
 async def get_security():
     return await security.status()
@@ -376,6 +589,19 @@ async def get_security():
 @router.post("/security/full-access")
 async def set_full_access(req: FullAccessRequest):
     return await security.set_full_access(req.enabled)
+
+
+@router.post("/permissions/bootstrap")
+async def permissions_bootstrap():
+    from jarvis.services import permissions
+
+    return await permissions.bootstrap()
+
+
+@router.post("/permissions/prompt")
+async def permissions_prompt():
+    """User-initiated — triggers macOS TCC permission dialogs."""
+    return await macos.prompt_permissions()
 
 
 @router.post("/terminal/run")
@@ -477,7 +703,7 @@ async def export_events_notion(limit: int = 40):
 
 @router.get("/notion/status")
 async def notion_status():
-    return {"configured": notion_sync.configured()}
+    return await notion_sync.diagnostics()
 
 
 class ScreenEventsRequest(BaseModel):
@@ -552,3 +778,156 @@ async def desktop_handle_popups():
     from jarvis.services import popup_handler
 
     return await popup_handler.handle_popups(full_control=await security.is_full_access())
+
+
+async def _ensure_remote_control() -> None:
+    if not await remote_control.is_enabled():
+        raise HTTPException(status_code=403, detail="remote control disabled")
+
+
+@router.get("/remote/control")
+async def get_remote_control():
+    return await remote_control.status()
+
+
+@router.post("/remote/control")
+async def set_remote_control(req: RemoteControlRequest):
+    return await remote_control.set_enabled(req.enabled)
+
+
+@router.post("/remote/mousemove")
+async def remote_mousemove(req: RemotePointRequest):
+    await _ensure_remote_control()
+    return await macos.mouse_move(req.x, req.y)
+
+
+@router.post("/remote/mousedown")
+async def remote_mousedown(req: RemotePointRequest):
+    await _ensure_remote_control()
+    return await macos.mouse_down(req.x, req.y, button=req.button)
+
+
+@router.post("/remote/mouseup")
+async def remote_mouseup(req: RemotePointRequest):
+    await _ensure_remote_control()
+    return await macos.mouse_up(req.x, req.y, button=req.button)
+
+
+@router.post("/remote/click")
+async def remote_click(req: RemotePointRequest):
+    await _ensure_remote_control()
+    return await macos.click(req.x, req.y, button=req.button)
+
+
+@router.post("/remote/type")
+async def remote_type(req: RemoteTypeRequest):
+    await _ensure_remote_control()
+    return await macos.type_text(req.text)
+
+
+@router.post("/remote/key")
+async def remote_key(req: RemoteKeyRequest):
+    await _ensure_remote_control()
+    return await macos.press_key(req.key, modifiers=req.modifiers)
+
+
+@router.get("/minis/status")
+async def minis_status():
+    return await minis.status()
+
+
+@router.post("/minis/screen-share")
+async def minis_screen_share(req: ScreenShareRequest):
+    return await minis.set_screen_share(req.enabled)
+
+
+@router.get("/minis/screen/frame")
+async def minis_screen_frame():
+    frame = await minis.get_screen_frame()
+    if not frame:
+        raise HTTPException(status_code=404, detail="no frame available")
+    return Response(content=frame, media_type=minis.frame_content_type(frame))
+
+
+@router.post("/minis/input")
+async def minis_input(req: MinisInputRequest):
+    if req.type not in ("tap", "move", "down", "up"):
+        raise HTTPException(status_code=400, detail="invalid input type")
+    result = await minis.handle_input(req.type, req.x, req.y)
+    if not result.get("ok"):
+        detail = result.get("error", "failed")
+        code = 403 if "disabled" in str(detail).lower() else 400
+        raise HTTPException(status_code=code, detail=detail)
+    return result
+
+
+@router.get("/minis/info")
+async def minis_info():
+    return await minis_ops.service_info()
+
+
+@router.post("/minis/restart")
+async def minis_restart(req: MinisRestartRequest):
+    target = req.target.strip().lower()
+    if target not in ("both", "helper", "core"):
+        raise HTTPException(status_code=400, detail="target must be both, helper, or core")
+    return await minis_ops.restart_services(target=target)
+
+
+@router.post("/minis/hard-reset")
+async def minis_hard_reset():
+    return await minis_ops.hard_reset_services()
+
+
+@router.post("/minis/update/helper")
+async def minis_update_helper(file: UploadFile = File(...)):
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="empty upload")
+    result = await minis_ops.apply_helper_binary(data)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "update failed"))
+    return result
+
+
+@router.post("/minis/update/helper-binary")
+async def minis_update_helper_binary(request: Request):
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="empty upload")
+    result = await minis_ops.apply_helper_binary(data)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "update failed"))
+    return result
+
+
+@router.post("/minis/update/ui")
+async def minis_update_ui(file: UploadFile = File(...)):
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="empty upload")
+    return await minis_ops.apply_minis_ui(data)
+
+
+@router.post("/minis/update/build")
+async def minis_build_helper():
+    return await minis_ops.build_helper_from_source()
+
+
+@router.websocket("/remote/ws")
+async def remote_control_ws(websocket: WebSocket):
+    await websocket.accept()
+    if not await remote_control.is_enabled():
+        await websocket.close(code=1008, reason="remote control disabled")
+        return
+    try:
+        while True:
+            payload = await websocket.receive_json()
+            action = str(payload.get("action", "")).strip().lower()
+            if not action:
+                await websocket.send_json({"ok": False, "error": "missing action"})
+                continue
+            result = await macos.dispatch_remote_action(action, payload)
+            await websocket.send_json({"action": action, **result})
+    except WebSocketDisconnect:
+        return

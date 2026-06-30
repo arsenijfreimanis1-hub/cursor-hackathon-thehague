@@ -5,14 +5,18 @@
     <key>Label</key>
     <string>com.willy.jarvis-helper</string>
     <key>Comment</key>
-    <string>William Agent macOS Helper</string>
+    <string>William Agent macOS Helper — MUST run signed JarvisHelper.app (not .build/release) for TCC</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
     <key>ProgramArguments</key>
     <array>
-      <string>/Users/willy/jarvis-core/macos-helper/.build/release/JarvisHelper</string>
+      <string>/Users/willy/jarvis-core/macos-helper/JarvisHelper.app/Contents/MacOS/JarvisHelper</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>

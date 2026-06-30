@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 
-from jarvis.services import approvals, macos, ollama, security
+from jarvis.services import approvals, macos, ollama, remote_control, security
 
 VISION_PROMPT = """Describe what is on this Mac screen in 2-3 sentences.
 Then suggest ONE concrete action William Agent should take.
@@ -69,7 +69,19 @@ async def _parse_and_execute(analysis: str, *, full_control: bool) -> dict:
     return await approvals.execute_desktop_action(f"ACTION: {action_line}")
 
 
+async def _remote_control_active_response() -> dict:
+    return {
+        "ok": True,
+        "remote_control_active": True,
+        "acted": False,
+        "reason": "remote control active — vision pipeline bypassed",
+    }
+
+
 async def analyze_screen() -> dict:
+    if await remote_control.is_enabled():
+        return await _remote_control_active_response()
+
     shot = await macos.screenshot()
     if not shot.get("ok"):
         return {"ok": False, "error": shot.get("error", "screenshot failed")}
@@ -112,6 +124,9 @@ async def analyze_screen() -> dict:
 
 
 async def analyze_and_act(*, full_control: bool = False) -> dict:
+    if await remote_control.is_enabled():
+        return await _remote_control_active_response()
+
     shot = await macos.screenshot()
     if not shot.get("ok"):
         return {"ok": False, "error": shot.get("error", "screenshot failed")}

@@ -40,6 +40,8 @@ if [[ "$VOICE_BACKEND" == "local_openwakeword_whisper" ]]; then
   [[ -n "$WHISPER_MODEL" ]] || WHISPER_MODEL="$ROOT/models/whisper/ggml-base.en.bin"
 fi
 
+chmod +x "$ROOT/scripts/local-wakeword.sh" "$ROOT/scripts/local-whisper-transcribe.sh" 2>/dev/null || true
+
 cd "$HELPER_DIR"
 swift build -c release
 
@@ -72,6 +74,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<'EOF'
   <string>William Agent listens for "Hey Willy" to assist you.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>William Agent uses speech recognition to hear wake words and commands.</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>William Agent observes your screen to provide context and handle permission dialogs.</string>
 </dict>
 </plist>
 EOF
@@ -123,6 +127,7 @@ EOF
 
 launchctl bootout "gui/$(id -u)/com.willy.jarvis-helper" 2>/dev/null || true
 pkill -f "JarvisHelper.app/Contents/MacOS/JarvisHelper" 2>/dev/null || true
+pkill -f "local_voice_openwakeword.py" 2>/dev/null || true
 sleep 1
 if ! launchctl bootstrap "gui/$(id -u)" "$PLIST_DST" 2>/dev/null; then
   launchctl bootout "gui/$(id -u)/com.willy.jarvis-helper" 2>/dev/null || true

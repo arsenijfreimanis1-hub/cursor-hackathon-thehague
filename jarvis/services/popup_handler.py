@@ -6,7 +6,7 @@ import logging
 import re
 
 from jarvis.config import settings
-from jarvis.services import macos, ollama, security
+from jarvis.services import macos, ollama, permissions, security
 
 log = logging.getLogger("jarvis.popup")
 
@@ -85,20 +85,43 @@ def _policy_override(parsed: dict) -> str | None:
 
 
 async def handle_popups(*, full_control: bool = True, max_attempts: int | None = None) -> dict:
-    """Screenshot, detect popup, click allow/deny/dismiss. Returns actions taken."""
+    """Detect macOS dialogs and click Allow/Deny/Dismiss (native AX first, then vision)."""
     if not settings.popup_handler_enabled:
         return {"ok": True, "skipped": True, "reason": "disabled"}
 
     if full_control and not await security.is_full_access():
-        return {"ok": False, "error": "full access required for popup clicks"}
+        return {"ok": False, "error": "full access required for popup clicks — enable in admin panel"}
 
     attempts = max_attempts or settings.popup_max_attempts
     actions: list[dict] = []
 
     for attempt in range(attempts):
+        native = await macos.handle_dialogs_native()
+        if native.get("acted"):
+            native_actions = native.get("actions") or []
+            is_permission_dialog = any(
+                a.get("kind") in ("dialog_button", "privacy_toggle") for a in native_actions
+            )
+            actions.append({
+                "attempt": attempt + 1,
+                "method": "accessibility",
+                "acted": True,
+                "native": native,
+            })
+            return {
+                "ok": True,
+                "popup": True,
+                "handled": True,
+                "actions": actions,
+                "needs_reprompt": is_permission_dialog,
+            }
+
         shot = await macos.screenshot()
         if not shot.get("ok"):
-            return {"ok": False, "error": shot.get("error", "screenshot failed"), "actions": actions}
+            err = shot.get("error", "screenshot failed")
+            if "screencapture" in err.lower() or "screenshot" in err.lower():
+                permissions.open_settings_pane("screen_recording")
+            return {"ok": False, "error": err, "actions": actions, "needs_screen_recording": True}
 
         path = shot.get("path")
         try:

@@ -1,9 +1,6 @@
-import subprocess
-
 import aiosqlite
 
 from jarvis.database import DB_PATH
-from jarvis.services import macos
 
 _KEY = "full_access"
 _cache: bool | None = None
@@ -59,25 +56,7 @@ async def status() -> dict:
 
 
 async def _unlock_system_permissions() -> dict:
-    helper = await macos.prompt_permissions()
-    opened: list[str] = []
+    """Bootstrap missing permissions without TCC popup spam (no CGRequestScreenCaptureAccess)."""
+    from jarvis.services import permissions
 
-    if not helper.get("accessibility"):
-        subprocess.run(
-            ["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"],
-            check=False,
-        )
-        opened.append("accessibility_settings")
-
-    perms = helper.get("permissions") or {}
-    if perms.get("microphone") != "granted" or perms.get("speech") != "granted":
-        subprocess.run(
-            ["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"],
-            check=False,
-        )
-        opened.append("microphone_settings")
-
-    return {
-        "helper": helper,
-        "opened_settings": opened,
-    }
+    return await permissions.bootstrap()

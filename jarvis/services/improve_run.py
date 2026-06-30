@@ -153,7 +153,7 @@ async def start(*, duration_minutes: int = 30) -> dict:
 
 async def _restart_services() -> None:
     uid = subprocess.check_output(["id", "-u"], text=True).strip()
-    for label in ("com.willy.jarvis-core", "com.willy.jarvis-helper", "com.willy.william-kiosk"):
+    for label in ("com.willy.jarvis-core", "com.willy.jarvis-helper"):
         subprocess.run(
             ["launchctl", "kickstart", "-k", f"gui/{uid}/{label}"],
             check=False,
@@ -163,8 +163,6 @@ async def _restart_services() -> None:
 
 
 async def _open_test_surfaces() -> None:
-    subprocess.run(["open", "-a", "William Agent"], check=False)
-    await asyncio.sleep(1.5)
     subprocess.run(["open", f"http://127.0.0.1:{settings.port}/"], check=False)
     await asyncio.sleep(1)
 
@@ -177,9 +175,11 @@ _FIX_TIMEOUT_SEC = 90
 async def _handle_permission_failure(failure: dict, run_id: int) -> bool:
     name = failure.get("name", "")
     if name == "accessibility":
-        await _append_log(run_id, "Prompting Accessibility permission for JarvisHelper")
-        result = await macos.prompt_permissions()
-        granted = result.get("accessibility") or result.get("granted")
+        await _append_log(run_id, "Bootstrapping Accessibility permission for JarvisHelper")
+        from jarvis.services import permissions
+
+        result = await permissions.bootstrap(force_settings=True)
+        granted = result.get("accessibility")
         if granted:
             await _append_log(run_id, "Accessibility granted")
             return True
@@ -280,7 +280,9 @@ async def _run_loop(run_id: int, deadline: datetime) -> None:
     try:
         self_modify.ensure_repo()
         await _open_test_surfaces()
-        await macos.prompt_permissions()
+        from jarvis.services import permissions
+
+        await permissions.bootstrap()
 
         oc = await openclaw.health()
         if not oc.get("whatsapp"):

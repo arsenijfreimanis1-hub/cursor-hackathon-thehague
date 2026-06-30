@@ -60,7 +60,7 @@ case "$cmd" in
     else
       echo "  Public tunnel: run ./scripts/enable-public-access.sh"
     fi
-    echo "  Postgres:     127.0.0.1:5432 (jarvis / jarvis_local / jarvis)"
+    echo "  Postgres:     127.0.0.1:5432 (postgres / postgres / rekentafel)"
     echo "  Redis:        127.0.0.1:6379"
     ;;
   stop)

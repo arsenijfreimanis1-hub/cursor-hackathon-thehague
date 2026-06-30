@@ -38,6 +38,7 @@ async def init_db() -> None:
     from jarvis.services.agent_registry import ensure_tables as ensure_agent_tables
     from jarvis.services.event_log import ensure_memory_epoch, ensure_tables as ensure_event_tables
     from jarvis.services.goals import ensure_tables as ensure_goals_tables
+    from jarvis.services.build_pipeline import ensure_tables as ensure_build_tables
     from jarvis.services.improve_run import ensure_tables as ensure_improve_run_tables
     from jarvis.services.learning import ensure_tables as ensure_learning_tables
     from jarvis.services.memory import ensure_tables as ensure_memory_tables
@@ -65,6 +66,7 @@ async def init_db() -> None:
     await ensure_agent_tables()
     await ensure_agent_learning_tables()
     await ensure_goals_tables()
+    await ensure_build_tables()
     await ensure_improve_run_tables()
     await ensure_event_tables()
     await ensure_memory_epoch()

@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     notion_api_key: str = ""
     notion_parent_page_id: str = ""
     notion_export_interval_hours: int = 12
-    screen_watch_enabled: bool = True
+    screen_watch_enabled: bool = False
     screen_capture_interval_seconds: int = 10
     screen_summary_window_seconds: int = 60
     screen_screenshot_retention_minutes: int = 30
@@ -71,9 +71,71 @@ class Settings(BaseSettings):
     screenpipe_base_url: str = "http://127.0.0.1:3030"
     popup_handler_enabled: bool = True
     popup_max_attempts: int = 3
+    popup_watchdog_interval_seconds: int = 45
+    auto_full_access: bool = False
+    remote_control_enabled: bool = False
     cursor_trace_enabled: bool = True
     sleep_junk_threshold_seconds: int = 45
     sleep_background_speech_seconds: int = 50
+    vigil_enabled: bool = False
+    vigil_gateway_url: str = "https://api.vigil.wtf/921f5773-4652-41e4-98f2-3c6ec36d0b3d"
+    vigil_api_url: str = "https://app.vigil-agent.com"
+    vigil_api_key: str = ""
+    vigil_agent_id: str = "william"
+    vigil_proxy_enabled: bool = True
+    vigil_proxy_url: str = "https://api.vigil.wtf/921f5773-4652-41e4-98f2-3c6ec36d0b3d"
+    vigil_proxy_provider: str = "anthropic"
+    vigil_proxy_openai_model: str = "gpt-4o-mini"
+    vigil_proxy_anthropic_model: str = "claude-sonnet-4-6"
+    vigil_proxy_max_tokens: int = 1024
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    build_parallel: int = 3
+    build_projects_dir: Path = Path.home() / "Projects"
+    external_skills_enabled: bool = True
+    mcp_enabled: bool = True
+    mcp_config_path: str = ""
+    github_token: str = ""
+    github_owner: str = ""
+    github_org: str = ""
+    william_hub_repo: str = "william-hub"
+    github_projects_private: bool = True
+    cursor_runtime: str = "local"
+    compute_cloud_workers: int = 3
+    github_sync_interval_hours: int = 2
+
+    def resolved_vigil_api_key(self) -> str:
+        for candidate in (
+            self.vigil_api_key,
+            os.environ.get("VIGIL_API_KEY", ""),
+            _read_env_file("VIGIL_API_KEY"),
+            _read_env_file("JARVIS_VIGIL_API_KEY"),
+        ):
+            if candidate and candidate.startswith("vgl_") and len(candidate) >= 20:
+                return candidate
+        return ""
+
+    def resolved_openai_api_key(self) -> str:
+        for candidate in (
+            self.openai_api_key,
+            os.environ.get("OPENAI_API_KEY", ""),
+            _read_env_file("OPENAI_API_KEY"),
+            _read_env_file("JARVIS_OPENAI_API_KEY"),
+        ):
+            if candidate and len(candidate) >= 20 and not candidate.endswith("..."):
+                return candidate
+        return ""
+
+    def resolved_anthropic_api_key(self) -> str:
+        for candidate in (
+            self.anthropic_api_key,
+            os.environ.get("ANTHROPIC_API_KEY", ""),
+            _read_env_file("ANTHROPIC_API_KEY"),
+            _read_env_file("JARVIS_ANTHROPIC_API_KEY"),
+        ):
+            if candidate and len(candidate) >= 20 and not candidate.endswith("..."):
+                return candidate
+        return ""
 
     def resolved_cursor_api_key(self) -> str:
         for candidate in (

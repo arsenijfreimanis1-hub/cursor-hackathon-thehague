@@ -67,6 +67,13 @@ async def _speak_result(task: dict, result: dict) -> None:
 
 
 async def _run_task(task: dict) -> None:
+    from jarvis.services import vigil_metrics
+
+    async with vigil_metrics.track_tool("worker.run_task", task_id=task.get("id"), title=task.get("title", "")[:80]):
+        await _run_task_inner(task)
+
+
+async def _run_task_inner(task: dict) -> None:
     global _active_jobs
     _active_jobs += 1
     try:

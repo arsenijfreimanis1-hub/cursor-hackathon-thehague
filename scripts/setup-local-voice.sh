@@ -58,6 +58,8 @@ download_oww_model "embedding_model.onnx"
 download_oww_model "melspectrogram.onnx"
 download_oww_model "hey_jarvis_v0.1.onnx"
 
+chmod +x "$DEFAULT_WAKE" "$DEFAULT_WHISPER"
+
 mkdir -p "$MODEL_DIR"
 if [[ ! -f "$MODEL_PATH" ]]; then
   curl -L \

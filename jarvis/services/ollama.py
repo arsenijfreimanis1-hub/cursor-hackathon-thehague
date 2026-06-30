@@ -21,13 +21,19 @@ async def chat(
     messages: list[dict] | None = None,
 ) -> str:
     built: list[dict] = []
-    if system:
-        built.append({"role": "system", "content": system})
     if messages:
         built.extend(messages)
     elif prompt:
         built.append({"role": "user", "content": prompt})
-    else:
+
+    from jarvis.services import vigil_proxy
+
+    if vigil_proxy.configured():
+        return await vigil_proxy.chat(system=system, messages=built, prompt=prompt)
+
+    if system:
+        built.insert(0, {"role": "system", "content": system})
+    elif not built:
         raise ValueError("prompt or messages required")
 
     async with httpx.AsyncClient(timeout=120.0) as client:

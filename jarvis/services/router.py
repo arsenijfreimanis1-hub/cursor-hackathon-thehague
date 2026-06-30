@@ -57,11 +57,12 @@ async def _build_system(
     text: str,
     lessons: str,
     conversation_id: str | None = None,
+    messaging: bool = False,
 ) -> str:
     mem = await memory.get_block(text)
     timeline = await event_log.get_timeline_block(limit=5)
     screen_block = ""
-    if settings.screen_watch_enabled:
+    if settings.screen_watch_enabled and not messaging:
         screen_block = await screen_hooks.on_user_prompt(text=text, conversation_id=conversation_id)
     memory_block = "\n\n".join(p for p in (mem, timeline, screen_block) if p)
     conversation = ""
@@ -167,6 +168,7 @@ async def route(
     voice: bool = False,
     conversation_id: str | None = None,
     task_id: int | None = None,
+    messaging: bool = False,
 ) -> dict:
     # 1. Execute local macOS / terminal actions first (never hallucinate "opening Spotify").
     local = await executor.try_local_execute(text, voice=voice)
@@ -197,7 +199,7 @@ async def route(
     kind = intent.classify(text) if voice else await intent.classify_async(text)
     lessons = await learning.get_lessons_block()
     system = await _build_system(
-        voice=voice, text=text, lessons=lessons, conversation_id=conversation_id
+        voice=voice, text=text, lessons=lessons, conversation_id=conversation_id, messaging=messaging
     )
 
     if WAKE_ONLY.match(text.strip()):

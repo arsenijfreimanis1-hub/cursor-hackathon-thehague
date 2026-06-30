@@ -4,28 +4,51 @@ import httpx
 
 from jarvis.config import settings
 
+_DEFAULT_TIMEOUT = httpx.Timeout(15.0, connect=2.0)
+_REMOTE_TIMEOUT = httpx.Timeout(2.0, connect=0.5)
+
+_helper_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _helper_client
+    if _helper_client is None or _helper_client.is_closed:
+        _helper_client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _helper_client
+
+
+async def close_helper_client() -> None:
+    global _helper_client
+    if _helper_client is not None and not _helper_client.is_closed:
+        await _helper_client.aclose()
+    _helper_client = None
+
 
 async def health() -> dict:
-    async with httpx.AsyncClient(timeout=3.0) as client:
-        try:
-            resp = await client.get(f"{settings.macos_helper_url}/status")
-            resp.raise_for_status()
-            return {"ok": True, **resp.json()}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+    try:
+        resp = await _get_client().get(
+            f"{settings.macos_helper_url}/status",
+            timeout=httpx.Timeout(3.0, connect=1.0),
+        )
+        resp.raise_for_status()
+        return {"ok": True, **resp.json()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 async def notify(title: str, message: str, speak: bool = False) -> dict:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            resp = await client.post(
-                f"{settings.macos_helper_url}/notify",
-                json={"title": title, "message": message, "speak": speak},
-            )
-            resp.raise_for_status()
-            return {"ok": True, "via": "helper"}
-        except Exception:
-            pass
+    try:
+        resp = await _get_client().post(
+            f"{settings.macos_helper_url}/notify",
+            json={"title": title, "message": message, "speak": speak},
+            timeout=httpx.Timeout(10.0),
+        )
+        resp.raise_for_status()
+        return {"ok": True, "via": "helper"}
+    except Exception:
+        pass
 
     safe_title = title.replace('"', '\\"')
     safe_msg = message.replace('"', '\\"')
@@ -41,16 +64,16 @@ async def notify(title: str, message: str, speak: bool = False) -> dict:
 
 
 async def speak(text: str) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            resp = await client.post(
-                f"{settings.macos_helper_url}/speak",
-                json={"text": text},
-            )
-            resp.raise_for_status()
-            return {"ok": True, **resp.json()}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+    try:
+        resp = await _get_client().post(
+            f"{settings.macos_helper_url}/speak",
+            json={"text": text},
+            timeout=httpx.Timeout(30.0),
+        )
+        resp.raise_for_status()
+        return {"ok": True, **resp.json()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 def _voice_clear(helper: dict) -> bool:
@@ -78,14 +101,38 @@ async def speak_when_clear(text: str, *, max_wait: float = 14.0) -> dict:
     return {"ok": False, "error": "deferred: user speaking"}
 
 
-async def _helper_post(path: str, *, json: dict | None = None, timeout: float = 15.0) -> dict:
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        try:
-            resp = await client.post(f"{settings.macos_helper_url}{path}", json=json or {})
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+async def _helper_post(
+    path: str,
+    *,
+    json: dict | None = None,
+    timeout: httpx.Timeout | None = None,
+) -> dict:
+    try:
+        resp = await _get_client().post(
+            f"{settings.macos_helper_url}{path}",
+            json=json or {},
+            timeout=timeout or _DEFAULT_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+async def _helper_get(path: str, *, timeout: httpx.Timeout | None = None) -> dict:
+    try:
+        resp = await _get_client().get(
+            f"{settings.macos_helper_url}{path}",
+            timeout=timeout or _DEFAULT_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+async def _remote_post(path: str, *, json: dict | None = None) -> dict:
+    return await _helper_post(path, json=json, timeout=_REMOTE_TIMEOUT)
 
 
 async def screenshot() -> dict:
@@ -95,16 +142,28 @@ async def screenshot() -> dict:
     return result
 
 
-async def click(x: float, y: float) -> dict:
-    return await _helper_post("/click", json={"x": x, "y": y})
+async def mouse_move(x: float, y: float) -> dict:
+    return await _remote_post("/mousemove", json={"x": x, "y": y})
+
+
+async def mouse_down(x: float, y: float, *, button: str = "left") -> dict:
+    return await _remote_post("/mousedown", json={"x": x, "y": y, "button": button})
+
+
+async def mouse_up(x: float, y: float, *, button: str = "left") -> dict:
+    return await _remote_post("/mouseup", json={"x": x, "y": y, "button": button})
+
+
+async def click(x: float, y: float, *, button: str = "left") -> dict:
+    return await _remote_post("/click", json={"x": x, "y": y, "button": button})
 
 
 async def type_text(text: str) -> dict:
-    return await _helper_post("/type", json={"text": text})
+    return await _remote_post("/type", json={"text": text})
 
 
 async def press_key(key: str, *, modifiers: list[str] | None = None) -> dict:
-    return await _helper_post("/key", json={"key": key, "modifiers": modifiers or []})
+    return await _remote_post("/key", json={"key": key, "modifiers": modifiers or []})
 
 
 async def sleep_voice() -> dict:
@@ -118,6 +177,22 @@ async def listen_voice() -> dict:
 
 async def clear_transcript() -> dict:
     return await _helper_post("/transcript/clear")
+
+
+async def start_guided_voice_enrollment() -> dict:
+    return await _helper_post("/voice/enroll/start-guided")
+
+
+async def voice_enrollment_status() -> dict:
+    return await _helper_get("/voice/enroll/status", timeout=httpx.Timeout(5.0))
+
+
+async def cancel_voice_enrollment() -> dict:
+    return await _helper_post("/voice/enroll/cancel")
+
+
+async def handle_dialogs_native() -> dict:
+    return await _helper_post("/dialogs/handle")
 
 
 async def ensure_voice_awake() -> dict:
@@ -183,36 +258,42 @@ async def restart_core_service() -> dict:
 
 
 async def set_muted(muted: bool) -> dict:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        try:
-            resp = await client.post(
-                f"{settings.macos_helper_url}/mute",
-                json={"muted": muted},
-            )
-            resp.raise_for_status()
-            return {"ok": True, **resp.json()}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+    try:
+        resp = await _get_client().post(
+            f"{settings.macos_helper_url}/mute",
+            json={"muted": muted},
+            timeout=httpx.Timeout(5.0),
+        )
+        resp.raise_for_status()
+        return {"ok": True, **resp.json()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 async def prompt_permissions() -> dict:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            resp = await client.post(f"{settings.macos_helper_url}/permissions/prompt")
-            resp.raise_for_status()
-            return {"ok": True, **resp.json()}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc), "accessibility": False}
+    """User-initiated permission prompts (triggers TCC dialogs). Use bootstrap_permissions() for automation."""
+    try:
+        resp = await _get_client().post(
+            f"{settings.macos_helper_url}/permissions/prompt",
+            timeout=httpx.Timeout(10.0),
+        )
+        resp.raise_for_status()
+        return {"ok": True, **resp.json()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "accessibility": False}
 
 
-async def _helper_get(path: str, *, timeout: float = 5.0) -> dict:
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        try:
-            resp = await client.get(f"{settings.macos_helper_url}{path}")
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+async def bootstrap_permissions() -> dict:
+    """Open missing settings panes + native AX — no TCC popup spam."""
+    try:
+        resp = await _get_client().post(
+            f"{settings.macos_helper_url}/permissions/bootstrap",
+            timeout=httpx.Timeout(10.0),
+        )
+        resp.raise_for_status()
+        return {"ok": True, **resp.json()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 async def screen_watcher_status() -> dict:
@@ -225,3 +306,35 @@ async def screen_watcher_pause() -> dict:
 
 async def screen_watcher_resume() -> dict:
     return await _helper_post("/screen/resume")
+
+
+async def dispatch_remote_action(action: str, payload: dict) -> dict:
+    """Execute a single remote input action (used by HTTP + WebSocket relay)."""
+    if action == "mousemove":
+        return await mouse_move(float(payload["x"]), float(payload["y"]))
+    if action == "mousedown":
+        return await mouse_down(
+            float(payload["x"]),
+            float(payload["y"]),
+            button=str(payload.get("button", "left")),
+        )
+    if action == "mouseup":
+        return await mouse_up(
+            float(payload["x"]),
+            float(payload["y"]),
+            button=str(payload.get("button", "left")),
+        )
+    if action == "click":
+        return await click(
+            float(payload["x"]),
+            float(payload["y"]),
+            button=str(payload.get("button", "left")),
+        )
+    if action == "type":
+        return await type_text(str(payload.get("text", "")))
+    if action == "key":
+        mods = payload.get("modifiers") or []
+        if not isinstance(mods, list):
+            mods = []
+        return await press_key(str(payload["key"]), modifiers=[str(m) for m in mods])
+    return {"ok": False, "error": f"unknown action: {action}"}
