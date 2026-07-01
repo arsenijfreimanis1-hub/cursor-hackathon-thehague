@@ -13,7 +13,7 @@ from jarvis.services import macos, minis, remote_control
 
 HELPER_BUILD = ROOT / "macos-helper" / ".build" / "release" / "JarvisHelper"
 HELPER_APP_BIN = ROOT / "macos-helper" / "JarvisHelper.app" / "Contents" / "MacOS" / "JarvisHelper"
-STAGING_DIR = ROOT / "data" / "minis-updates"
+STAGING_DIR = settings.data_dir / "minis-updates"
 MINIS_HTML = ROOT / "jarvis" / "static" / "minis.html"
 RESTART_SCRIPT = ROOT / "scripts" / "restart.sh"
 INSTALL_HELPER_SCRIPT = ROOT / "scripts" / "install-helper.sh"

@@ -59,11 +59,13 @@ func openMissingPermissionSettings() {
 }
 
 func takeScreenshot() -> [String: Any] {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("jarvis-screenshot.png")
-    if runCommand("/usr/sbin/screencapture", ["-x", url.path]) {
-        return ["ok": true, "path": url.path]
-    }
-    return ["ok": false, "error": "screencapture failed"]
+    // Screen Recording not used — desktop awareness goes through Accessibility (DesktopContext).
+    return [
+        "ok": false,
+        "error": "screenshots disabled — use GET /desktop/context (Accessibility API, no Screen Recording)",
+        "method": "accessibility",
+        "use_context": true,
+    ]
 }
 
 func escapeAppleScript(_ text: String) -> String {
@@ -166,10 +168,9 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
             respond(connection, status: "200 OK", body: ["ok": false, "error": "missing muted flag"])
         }
     case ("POST", "/permissions/prompt"):
-        // User-initiated only — triggers TCC prompts (menubar "Grant permissions…").
+        // User-initiated only — Accessibility + mic/speech; no Screen Recording prompts.
         DispatchQueue.main.async {
             WakeWordListener.shared.requestPermissionsUserInitiated()
-            ScreenWatcher.shared.promptScreenRecordingAccess()
         }
         let accessibility = Input.promptAccessibility()
         respond(connection, status: "200 OK", body: [
@@ -180,7 +181,8 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
             "permissions": WakeWordListener.shared.authStatus(),
             "wake_listening": WakeWordListener.shared.isActive,
             "healthy": WakeWordListener.shared.isHealthy,
-            "screen_capture_granted": ScreenWatcher.shared.status()["screen_capture_granted"] as? Bool ?? false,
+            "screen_capture_granted": false,
+            "screen_capture_mode": "accessibility",
         ])
     case ("POST", "/permissions/bootstrap"):
         // Automated bootstrap — opens settings panes, no CGRequestScreenCaptureAccess.
@@ -206,12 +208,11 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
         }
         respond(connection, status: "200 OK", body: dialogResult)
     case ("POST", "/screen/prompt-recording"):
-        DispatchQueue.main.async {
-            ScreenWatcher.shared.promptScreenRecordingAccess()
-        }
         respond(connection, status: "200 OK", body: [
-            "ok": true,
-            "screen_capture_granted": ScreenWatcher.shared.status()["screen_capture_granted"] as? Bool ?? false,
+            "ok": false,
+            "error": "Screen Recording disabled — William uses Accessibility API instead",
+            "screen_capture_granted": false,
+            "screen_capture_mode": "accessibility",
         ])
     case ("POST", "/voice/enroll/start"):
         DispatchQueue.main.async {
@@ -251,6 +252,15 @@ func handleRequest(_ connection: NWConnection, buffer: Data) {
         respond(connection, status: "200 OK", body: ["ok": true, "voice_profile": SpeakerVerifier.shared.status()])
     case ("POST", "/screenshot"):
         respond(connection, status: "200 OK", body: takeScreenshot())
+    case ("GET", "/desktop/context"):
+        respond(connection, status: "200 OK", body: DesktopContext.snapshot())
+    case ("POST", "/desktop/press"):
+        if let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any],
+           let target = json["target"] as? String {
+            respond(connection, status: "200 OK", body: DesktopContext.press(target: target))
+        } else {
+            respond(connection, status: "200 OK", body: ["ok": false, "error": "missing target"])
+        }
     case ("GET", "/screen/status"):
         respond(connection, status: "200 OK", body: ["ok": true, "watcher": ScreenWatcher.shared.status()])
     case ("POST", "/screen/pause"):
@@ -518,7 +528,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func grantPermissions() {
         WakeWordListener.shared.requestPermissionsUserInitiated()
-        ScreenWatcher.shared.promptScreenRecordingAccess()
         _ = Input.promptAccessibility()
     }
 

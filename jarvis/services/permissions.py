@@ -59,9 +59,7 @@ async def bootstrap(*, force_settings: bool = False) -> dict:
             opened.append("speech")
 
     screen = status.get("screen_watcher") or {}
-    if settings.screen_watch_enabled and not screen.get("screen_capture_granted"):
-        if open_settings_pane("screen_recording", force=force_settings):
-            opened.append("screen_recording")
+    # Screen Recording is intentionally not used — Accessibility only.
 
     if native.get("acted"):
         opened.append("native_dialog_handled")

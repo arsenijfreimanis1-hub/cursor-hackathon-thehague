@@ -27,8 +27,14 @@ function escapeVoiceHtml(s) {
 
 function applyVoiceOrbStyle(orbEl, voiceUi) {
   if (!orbEl || !voiceUi) return;
-  orbEl.className = voiceOrbClass(voiceUi.state);
-  orbEl.textContent = VOICE_ORB_ICONS[voiceUi.state] || '🎙';
+  const isWilliamOrb = orbEl.classList.contains('w-voice-orb') || (orbEl.id && orbEl.id.startsWith('w-'));
+  const baseClass = isWilliamOrb ? 'w-voice-orb' : 'voice-orb';
+  orbEl.className = `${baseClass} ${voiceUi.state}`;
+  if (!isWilliamOrb) {
+    orbEl.textContent = VOICE_ORB_ICONS[voiceUi.state] || '🎙';
+  } else {
+    orbEl.textContent = VOICE_ORB_ICONS[voiceUi.state] || '👂';
+  }
   if (voiceUi.color) {
     orbEl.style.borderColor = voiceUi.color + '88';
     orbEl.style.background = voiceUi.color + '18';
@@ -99,6 +105,22 @@ function renderVoiceState(target, voiceUi, opts = {}) {
 function applyChatVoiceStatus(voiceUi) {
   const dot = document.getElementById('dot-voice');
   const label = document.getElementById('st-voice');
+  const orb = document.getElementById('w-voice-orb');
+  const orbLabel = document.getElementById('w-voice-label');
+  const orbDetail = document.getElementById('w-voice-detail');
+  const pill = document.getElementById('w-pill-voice');
+
+  if (orb && voiceUi) {
+    applyVoiceOrbStyle(orb, voiceUi);
+    if (orbLabel) orbLabel.textContent = voiceUi.label;
+    if (orbDetail) orbDetail.textContent = voiceUi.detail || '';
+  }
+  if (pill && voiceUi) {
+    const live = ['awaiting', 'conversation', 'busy', 'speaking'].includes(voiceUi.state);
+    pill.className = 'w-pill ' + (live ? 'live ok' : (voiceUi.state === 'standby' ? 'ok' : ''));
+    pill.innerHTML = `<span class="w-dot ${live || voiceUi.state === 'standby' ? 'ok' : ''}"></span>${escapeVoiceHtml(voiceUi.label)}`;
+  }
+
   if (!dot || !label || !voiceUi) return;
   const live = ['awaiting', 'conversation', 'busy', 'speaking'].includes(voiceUi.state);
   dot.className = 'dot ' + (live ? 'live' : (['standby', 'sleeping'].includes(voiceUi.state) ? 'ok' : ''));

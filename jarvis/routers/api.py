@@ -1,9 +1,10 @@
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from jarvis.config import settings
 from jarvis.services import (
+    activity_stream,
     agent_author,
     agent_registry,
     agent_runtime,
@@ -195,6 +196,7 @@ async def health():
     key = settings.resolved_cursor_api_key()
     security_status = await security.status()
     openclaw_status = await openclaw.health()
+    sandbox = await self_modify.status()
     return {
         "agent": settings.agent_name,
         "ollama": ollama_status,
@@ -202,6 +204,7 @@ async def health():
         "voice_ui": voice_state.voice_ui_payload(helper_status),
         "cursor": {"configured": settings.cursor_configured()},
         "openclaw": openclaw_status,
+        "self_modify": sandbox,
         "scheduler": scheduler.status(),
         "worker": worker.status(),
         "security": security_status,
@@ -221,6 +224,35 @@ async def list_skills():
         "external_enabled": settings.external_skills_enabled,
         "skills": skills.list_installed_skills(),
     }
+
+
+@router.get("/activity/stream")
+async def activity_sse():
+    async def event_generator():
+        # Hello so clients connect immediately
+        yield activity_stream.event_to_sse({"kind": "system", "title": "Live feed connected", "status": "done"})
+        async for event in activity_stream.subscribe():
+            yield activity_stream.event_to_sse(event)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/activity/recent")
+async def activity_recent(limit: int = 40):
+    events = await event_log.list_events(limit=limit)
+    return {"events": events}
+
+
+@router.get("/activity/frame/{frame_id}")
+async def activity_frame(frame_id: str):
+    path = activity_stream.frame_path(frame_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="frame not found")
+    return FileResponse(path, media_type="image/png")
 
 
 @router.get("/vigil/status")
@@ -328,7 +360,13 @@ async def forget_person(person_id: int):
 
 @router.post("/macos/screenshot")
 async def take_screenshot():
-    return await macos.screenshot()
+    """Legacy alias — returns Accessibility desktop context (no Screen Recording)."""
+    return await macos.desktop_context()
+
+
+@router.get("/macos/desktop/context")
+async def desktop_context():
+    return await macos.desktop_context()
 
 
 @router.post("/macos/notify")

@@ -47,9 +47,15 @@ RECALL_HINTS = re.compile(
     r"\b(what did (?:i|we)|do you remember|recall|what was (?:that|it) about)\b",
     re.I,
 )
+SCREEN_HINTS = re.compile(
+    r"\b(on my screen|what'?s on (?:my )?screen|what am i looking at|look at (?:my |the )?screen|"
+    r"see (?:my |the )?screen|read (?:the )?screen|what'?s open|this window|this app|"
+    r"click (?:the |on )?|tap (?:the |on )?|press (?:the )?|screenshot|what do you see)\b",
+    re.I,
+)
 
 VALID = frozenset(
-    {"exit", "cancel", "time", "terminal", "system", "weather", "code", "action", "reason", "fact", "chat", "remember", "recall"}
+    {"exit", "cancel", "time", "terminal", "system", "weather", "code", "action", "reason", "fact", "chat", "remember", "recall", "screen"}
 )
 
 
@@ -72,6 +78,8 @@ def classify(text: str) -> str:
         return "remember"
     if RECALL_HINTS.search(cleaned):
         return "recall"
+    if SCREEN_HINTS.search(cleaned):
+        return "screen"
     if WEATHER_QUERY.search(cleaned):
         return "fact"
     if CODE_HINTS.search(cleaned) or len(cleaned) > 600:

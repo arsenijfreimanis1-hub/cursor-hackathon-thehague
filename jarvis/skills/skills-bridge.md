@@ -8,6 +8,7 @@ William integrates multiple agent skill ecosystems. Use the right skill for each
 | GSD | Spec-driven builds, phased delivery | Built into build pipeline |
 | Web automation | Scraping, forms, browser tasks | `pip install helium` |
 | Media | Video edit, ffmpeg, Remotion | `brew install ffmpeg` |
+| **Cursor SDK** | Code edits, refactors, self-modify | `CURSOR_API_KEY` in `.env` — no IDE required |
 | MCP tools | Filesystem, APIs, NullClaw tools | Configure `.cursor/mcp.json` |
 
 ## How they work together
@@ -22,5 +23,7 @@ William integrates multiple agent skill ecosystems. Use the right skill for each
 - "build project: planetary gear assembly" → CAD + GSD domains
 - "build: scrape product prices from site" → web automation domain
 - "build: promo video with captions" → media domain
+- "improve yourself: fix the minis touchpad" → Cursor SDK + self_modify sandbox
+- "improve-run: 30" → autonomous fix loop (30 minutes)
 
 When multiple domains apply, slices are ordered: scaffold → domain work → integration.

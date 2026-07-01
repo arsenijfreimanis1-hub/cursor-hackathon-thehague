@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from pathlib import Path
 
 import aiosqlite
@@ -12,6 +13,7 @@ from jarvis.services import macos, remote_control
 
 _SCREEN_KEY = "screen_share_enabled"
 _cache: bool | None = None
+_display_size: tuple[int, int] | None = None
 _frame_lock = asyncio.Lock()
 _latest_frame: bytes | None = None
 _stream_task: asyncio.Task | None = None
@@ -64,9 +66,38 @@ async def set_screen_share(enabled: bool) -> dict:
     return {"screen_share_enabled": enabled}
 
 
+async def _primary_display_size() -> tuple[int, int]:
+    global _display_size
+    if _display_size:
+        return _display_size
+
+    def _probe() -> tuple[int, int]:
+        try:
+            out = subprocess.check_output(
+                [
+                    "osascript",
+                    "-e",
+                    'tell application "Finder" to get bounds of window of desktop',
+                ],
+                text=True,
+                timeout=3,
+            ).strip()
+            # format: 0, 0, width, height
+            parts = [int(p.strip()) for p in out.split(",")]
+            if len(parts) >= 4:
+                return max(parts[2], 1), max(parts[3], 1)
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            pass
+        return 1920, 1080
+
+    _display_size = await asyncio.to_thread(_probe)
+    return _display_size
+
+
 async def status() -> dict:
     helper = await macos.health()
     screen_helper = await macos.screen_watcher_status()
+    w, h = await _primary_display_size()
     return {
         "core_ok": True,
         "remote_control": await remote_control.status(),
@@ -74,6 +105,8 @@ async def status() -> dict:
         "macos_helper": helper,
         "screen_watcher": screen_helper.get("watcher") if screen_helper.get("ok") else None,
         "has_frame": _latest_frame is not None,
+        "display_width": w,
+        "display_height": h,
     }
 
 
@@ -96,18 +129,12 @@ async def get_screen_frame() -> bytes | None:
 
 async def _capture_frame() -> None:
     global _latest_frame
-    result = await macos.screenshot()
-    if not result.get("ok"):
+    ctx = await macos.desktop_context()
+    if not ctx.get("ok"):
         return
-    path = result.get("path")
-    if not path:
-        return
-    try:
-        data = Path(path).read_bytes()
-    except OSError:
-        return
+    text = (ctx.get("text") or "")[:8000]
     async with _frame_lock:
-        _latest_frame = data
+        _latest_frame = text.encode("utf-8")
 
 
 async def _stream_loop() -> None:
@@ -141,4 +168,8 @@ def frame_content_type(data: bytes) -> str:
         return "image/png"
     if data[:2] == b"\xff\xd8":
         return "image/jpeg"
-    return "application/octet-stream"
+    try:
+        data.decode("utf-8")
+        return "text/plain; charset=utf-8"
+    except UnicodeDecodeError:
+        return "application/octet-stream"

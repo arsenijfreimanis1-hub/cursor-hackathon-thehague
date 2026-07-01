@@ -13,5 +13,9 @@ let package = Package(
             name: "WilliamKiosk",
             path: "Sources/WilliamKiosk"
         ),
+        .executableTarget(
+            name: "WilliamDesktop",
+            path: "Sources/WilliamDesktop"
+        ),
     ]
 )

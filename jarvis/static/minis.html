@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#0b0f14">
   <title>Jarvis Minis</title>
   <link rel="manifest" href="/static/minis-manifest.json">
+  <link rel="stylesheet" href="/static/william-ui.css" />
   <style>
     :root {
       color-scheme: dark;
@@ -241,6 +242,9 @@
     let screenEnabled = false;
     let frameTimer = null;
     let pointerDown = false;
+    let displayW = 1920;
+    let displayH = 1080;
+    let lastFrameUrl = null;
 
     async function fetchStatus() {
       try {
@@ -249,6 +253,8 @@
         const data = await res.json();
         remoteEnabled = data.remote_control?.remote_control_enabled ?? false;
         screenEnabled = !!data.screen_share_enabled;
+        displayW = data.display_width || 1920;
+        displayH = data.display_height || 1080;
         const helperOk = data.macos_helper?.ok ?? false;
         dot.classList.toggle('ok', data.core_ok && helperOk);
         statusEl.textContent = data.core_ok
@@ -281,7 +287,9 @@
         const res = await fetch('/api/minis/screen/frame?t=' + Date.now());
         if (!res.ok) throw new Error('no frame');
         const blob = await res.blob();
-        screenImg.src = URL.createObjectURL(blob);
+        if (lastFrameUrl) URL.revokeObjectURL(lastFrameUrl);
+        lastFrameUrl = URL.createObjectURL(blob);
+        screenImg.src = lastFrameUrl;
         screenImg.hidden = false;
         placeholder.hidden = true;
       } catch {
@@ -295,8 +303,8 @@
 
     function mapPoint(clientX, clientY) {
       const rect = touchpad.getBoundingClientRect();
-      const x = ((clientX - rect.left) / rect.width) * 1920;
-      const y = ((clientY - rect.top) / rect.height) * 1080;
+      const x = ((clientX - rect.left) / rect.width) * displayW;
+      const y = ((clientY - rect.top) / rect.height) * displayH;
       return { x: Math.max(0, x), y: Math.max(0, y) };
     }
 

@@ -6,12 +6,14 @@ from jarvis.services import (
     build_pipeline,
     event_log,
     goal_runner,
+    improve_run,
     learning,
     memory,
     notion_sync,
     router,
     screen_hooks,
     security,
+    self_modify,
     sessions,
     task_priority,
     task_splitter,
@@ -21,7 +23,12 @@ from jarvis.services import (
 
 SENSITIVE_KEYWORDS = ("delete", "deploy", "purchase", "api key", "credential")
 GOAL_PREFIX = re.compile(r"^(?:goal|autonomous goal):\s*", re.I)
-MESSAGING_SOURCES = ("whatsapp:", "telegram:", "signal:", "sms:")
+MESSAGING_SOURCES = ("whatsapp:", "telegram:", "signal:", "sms:", "web:", "openclaw:")
+
+
+def _is_messaging_source(source: str) -> bool:
+    lowered = source.lower()
+    return lowered.startswith(MESSAGING_SOURCES) or lowered == "openclaw"
 VOICE_COMMAND_HINTS = (
     "play", "open", "weather", "spotify", "remember", "what", "who", "how",
     "time", "pause", "stop", "skip", "close", "search", "tell", "check",
@@ -152,7 +159,7 @@ async def handle_message(
     speaker_confidence: float | None = None,
 ) -> dict:
     voice = source == "voice"
-    messaging = source.startswith(MESSAGING_SOURCES)
+    messaging = _is_messaging_source(source)
     conversation_id, is_new_session = await sessions.get_or_create(session_id, source=source, message=text)
     await sessions.add_message(conversation_id, "user", text)
 
@@ -192,6 +199,70 @@ async def handle_message(
             "engine": "ignored",
             "session_id": conversation_id,
             "intent": "ignored",
+        }
+
+    if self_modify.looks_like_improve_run(text):
+        minutes = self_modify.improve_run_minutes(text)
+        started = await improve_run.start(duration_minutes=minutes)
+        if started.get("ok"):
+            reply = (
+                f"Improve loop running for {minutes} minutes, boss."
+                if voice
+                else f"Autonomous improve loop started ({minutes} min). Track at GET /api/self/improve-run/status"
+            )
+        else:
+            reply = started.get("error", "Could not start improve loop.")
+            if voice:
+                reply = f"Couldn't start that, boss. {reply[:50]}"
+        await sessions.add_message(conversation_id, "assistant", reply, engine="improve_run")
+        return {
+            "reply": reply,
+            "engine": "improve_run",
+            "session_id": conversation_id,
+            "intent": "self_modify",
+            "duration_minutes": minutes,
+        }
+
+    if self_modify.looks_like_self_modify(text):
+        description = self_modify.extract_description(text)
+        result = await self_modify.propose(description)
+        if result.get("merged") or result.get("auto_executed"):
+            reply = (
+                "Done, boss. I updated my code and merged the changes."
+                if voice
+                else f"Self-modify merged on branch {result.get('branch', '')}. {result.get('diff', '')[:200]}"
+            )
+        elif result.get("approval_id"):
+            reply = (
+                "Changes are on a sandbox branch, boss. Approve the merge in the panel."
+                if voice
+                else (
+                    f"Sandbox branch `{result.get('branch')}` ready. "
+                    f"Approve merge #{result.get('approval_id')} in /admin or via API."
+                )
+            )
+        elif result.get("ok"):
+            reply = "Sandbox branch created, boss." if voice else f"Sandbox `{result.get('branch')}` — review diff in /admin."
+        else:
+            err = result.get("error", "Self-modify failed.")
+            reply = f"Couldn't change my code, boss. {err[:60]}" if voice else err
+        await sessions.add_message(conversation_id, "assistant", reply, engine="self_modify")
+        await event_log.log_interaction(
+            source=source,
+            user_message=text,
+            assistant_reply=reply,
+            intent="self_modify",
+            engine="self_modify",
+            conversation_id=conversation_id,
+            metadata={"branch": result.get("branch"), "approval_id": result.get("approval_id")},
+        )
+        return {
+            "reply": reply,
+            "engine": "self_modify",
+            "session_id": conversation_id,
+            "intent": "self_modify",
+            "branch": result.get("branch"),
+            "approval_id": result.get("approval_id"),
         }
 
     build_approval = await build_pipeline.handle_voice_command(text, session_id=conversation_id)
@@ -317,7 +388,7 @@ async def handle_message(
 
     try:
         subtasks = [text]
-        if not voice or len(text) > 80 or task_splitter.looks_compound(text):
+        if not messaging and (not voice or len(text) > 80 or task_splitter.looks_compound(text)):
             subtasks = await task_splitter.split_prompt(text)
         if len(subtasks) > 1:
             result = await _queue_batch(

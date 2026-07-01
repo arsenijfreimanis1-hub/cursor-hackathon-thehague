@@ -40,22 +40,38 @@ function extractMessageText(raw: string): string {
   return withoutEnvelope || trimmed;
 }
 
+function normalizeSource(channel: string, senderId?: string): string {
+  const c = channel.toLowerCase();
+  const id = senderId ?? "unknown";
+  if (c === "web" || c.includes("whatsapp")) {
+    return `whatsapp:${id}`;
+  }
+  if (c) return `${c}:${id}`;
+  return "openclaw";
+}
+
 async function fetchJarvisReply(
   jarvisUrl: string,
   text: string,
   source: string,
 ): Promise<string> {
-  const resp = await fetch(`${jarvisUrl}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: text, source }),
-    signal: AbortSignal.timeout(90_000),
-  });
-  if (!resp.ok) {
-    return `JarvisCore error (${resp.status}). Check ${jarvisUrl}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const resp = await fetch(`${jarvisUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, source }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      return `JarvisCore error (${resp.status}). Check ${jarvisUrl}`;
+    }
+    const data = (await resp.json()) as { reply?: string; error?: string };
+    return data.reply ?? data.error ?? "No response from William Agent.";
+  } finally {
+    clearTimeout(timer);
   }
-  const data = (await resp.json()) as { reply?: string; error?: string };
-  return data.reply ?? data.error ?? "No response from William Agent.";
 }
 
 export default definePluginEntry({
@@ -75,7 +91,7 @@ export default definePluginEntry({
       if (!cleaned || isSlashCommand(cleaned)) {
         return "";
       }
-      const source = channel ? `${channel}:${senderId ?? "unknown"}` : "openclaw";
+      const source = normalizeSource(channel, senderId);
       return fetchJarvisReply(jarvisUrl, cleaned, source);
     };
 

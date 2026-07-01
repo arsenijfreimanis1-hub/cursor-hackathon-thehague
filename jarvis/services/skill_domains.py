@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-SkillDomain = Literal["cad", "gsd", "web_automation", "media"]
+SkillDomain = Literal["cad", "gsd", "web_automation", "media", "cursor"]
 
 _DOMAIN_KEYWORDS: dict[SkillDomain, tuple[str, ...]] = {
     "cad": (
@@ -65,6 +65,21 @@ _DOMAIN_KEYWORDS: dict[SkillDomain, tuple[str, ...]] = {
         "caption",
         "subtitle",
     ),
+    "cursor": (
+        "cursor sdk",
+        "cursor agent",
+        "refactor",
+        "implement",
+        "codebase",
+        "pull request",
+        "write tests",
+        "fix bug",
+        "add feature",
+        "self-modify",
+        "improve yourself",
+        "change your code",
+        "jarvis-core",
+    ),
 }
 
 # Jarvis skill files that map to each domain (stem names under jarvis/skills/)
@@ -73,6 +88,7 @@ _DOMAIN_SKILL_FILES: dict[SkillDomain, str] = {
     "gsd": "gsd-planning",
     "web_automation": "web-automation",
     "media": "media-production",
+    "cursor": "cursor-sdk",
 }
 
 # External skill directory name prefixes to pull from ~/.agents/skills etc.
@@ -81,6 +97,7 @@ _EXTERNAL_SKILL_PREFIXES: dict[SkillDomain, tuple[str, ...]] = {
     "gsd": ("gsd-", "get-shit-done"),
     "web_automation": ("helium", "web-automation", "browser"),
     "media": ("video", "media", "ffmpeg", "remotion"),
+    "cursor": ("cursor", "codex", "composer"),
 }
 
 
@@ -132,4 +149,6 @@ def stack_hints_for_domains(domains: list[SkillDomain]) -> dict[str, str]:
         hints.update({"domain": "media", "language": "typescript", "media_tool": "ffmpeg"})
     if "gsd" in domains:
         hints.setdefault("planning", "gsd")
+    if "cursor" in domains:
+        hints.setdefault("execution_engine", "cursor_sdk")
     return hints

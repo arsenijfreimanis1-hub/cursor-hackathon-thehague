@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Copy SQLite DB to backups/ with timestamp. Keeps last 14 copies.
+# Copy SQLite DB to backups with timestamp. Keeps last 14 copies.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DB="$ROOT/data/jarvis.db"
-DEST="$ROOT/backups"
+# shellcheck source=scripts/jarvis-paths.sh
+source "$ROOT/scripts/jarvis-paths.sh"
+
+DB="$JARVIS_DATA_DIR/jarvis.db"
+DEST="$JARVIS_BACKUPS_DIR"
 mkdir -p "$DEST"
 
 if [[ ! -f "$DB" ]]; then

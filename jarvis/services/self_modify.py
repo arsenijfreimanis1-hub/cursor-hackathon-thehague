@@ -1,12 +1,72 @@
+import re
 import asyncio
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from jarvis.config import settings
+from jarvis.paths import venv_python
 from jarvis.services import approvals, cursor_agent, security
 
 SANDBOX_PREFIX = "sandbox/"
+
+SELF_MODIFY_PREFIX = re.compile(
+    r"^(?:self-?modify|improve yourself|fix yourself|change your(?:\s+own)?\s+code)[:]\s*",
+    re.I,
+)
+IMPROVE_RUN_PREFIX = re.compile(
+    r"^(?:improve-?run|autonomous improve|run improve loop)(?:\s+for)?\s*:?\s*(\d+)?",
+    re.I,
+)
+_JARVIS_SELF_HINTS = (
+    "your code",
+    "your own code",
+    "jarvis-core",
+    "william agent",
+    "improve yourself",
+    "fix yourself",
+    "self-modify",
+    "self modify",
+    "change yourself",
+)
+
+
+def looks_like_self_modify(text: str) -> bool:
+    stripped = text.strip()
+    if SELF_MODIFY_PREFIX.match(stripped):
+        return True
+    lowered = stripped.lower()
+    if not any(hint in lowered for hint in _JARVIS_SELF_HINTS):
+        return False
+    return any(
+        kw in lowered
+        for kw in ("fix", "add", "change", "update", "improve", "refactor", "implement", "remove")
+    )
+
+
+def extract_description(text: str) -> str:
+    stripped = text.strip()
+    match = SELF_MODIFY_PREFIX.match(stripped)
+    if match:
+        return stripped[match.end():].strip() or stripped
+    return stripped
+
+
+def looks_like_improve_run(text: str) -> bool:
+    return bool(IMPROVE_RUN_PREFIX.match(text.strip()))
+
+
+def improve_run_minutes(text: str, *, default: int = 30) -> int:
+    match = IMPROVE_RUN_PREFIX.match(text.strip())
+    if not match:
+        return default
+    raw = (match.group(1) or "").strip()
+    if not raw:
+        return default
+    try:
+        return max(5, min(180, int(raw)))
+    except ValueError:
+        return default
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
@@ -105,22 +165,27 @@ async def propose(description: str) -> dict:
 
 
 async def run_tests() -> dict:
+    python = venv_python()
     proc = await asyncio.create_subprocess_exec(
-        settings.workspace_dir / ".venv/bin/python",
+        str(python),
         "-m",
-        "compileall",
+        "pytest",
+        "tests/",
         "-q",
-        "jarvis",
+        "--tb=line",
         cwd=settings.workspace_dir,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
+    out = stdout.decode()
+    err = stderr.decode()
     ok = proc.returncode == 0
     return {
         "ok": ok,
-        "stdout": stdout.decode(),
-        "stderr": stderr.decode(),
+        "stdout": out,
+        "stderr": err,
+        "summary": (out or err).strip().splitlines()[-1] if (out or err).strip() else "",
     }
 
 

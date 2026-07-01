@@ -28,9 +28,9 @@
     <key>WorkingDirectory</key>
     <string>/Users/willy/jarvis-core</string>
     <key>StandardOutPath</key>
-    <string>/Users/willy/jarvis-core/logs/jarvis.log</string>
+    <string>/Users/willy/Library/Logs/Jarvis/jarvis.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/willy/jarvis-core/logs/jarvis.err.log</string>
+    <string>/Users/willy/Library/Logs/Jarvis/jarvis.err.log</string>
     <key>EnvironmentVariables</key>
     <dict>
       <key>HOME</key>

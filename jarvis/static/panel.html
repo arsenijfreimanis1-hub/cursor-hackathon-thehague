@@ -343,19 +343,29 @@
       overflow: hidden;
       background: #0f1218;
     }
-    .task-group summary {
-      list-style: none;
-      cursor: pointer;
-      padding: 0.55rem 0.75rem;
+    .task-group-toggle {
+      width: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      padding: 0.55rem 0.75rem;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
       font-size: 0.82rem;
       font-weight: 600;
-      user-select: none;
+      cursor: pointer;
+      text-align: left;
     }
-    .task-group summary::-webkit-details-marker { display: none; }
-    .task-group summary:hover { background: var(--card-hover); }
+    .task-group-toggle:hover { background: var(--card-hover); }
+    .task-group-body {
+      list-style: none;
+      margin: 0;
+      padding: 0 0.75rem 0.35rem;
+      display: none;
+    }
+    .task-group.open .task-group-body { display: block; }
     .group-count {
       font-size: 0.7rem;
       color: var(--muted);
@@ -364,9 +374,8 @@
       padding: 0.1rem 0.45rem;
       border-radius: 999px;
     }
-    .task-group ul { padding: 0 0.75rem 0.35rem; }
-    .task-group li { font-size: 0.82rem; }
-    .task-group li small { color: var(--muted); }
+    .task-group-body li { font-size: 0.82rem; }
+    .task-group-body li small { color: var(--muted); }
     .task-empty { color: var(--muted); font-size: 0.85rem; padding: 0.25rem 0; }
 
     .actions { margin-top: 0.4rem; }
@@ -393,7 +402,7 @@
     <div class="brand">
       <div>
         <h1>William Agent</h1>
-        <div class="brand-sub" id="agent-sub">JarvisCore · <a href="/" style="color:var(--accent);text-decoration:none">Agent chat →</a></div>
+        <div class="brand-sub"><span id="agent-meta">JarvisCore · :8787</span> · <a href="/" style="color:var(--accent);text-decoration:none">Agent chat →</a></div>
       </div>
       <div class="live-badge" id="live-badge" title="Willy is listening for your response">
         <span class="live-dot"></span>
@@ -526,6 +535,7 @@
     </section>
   </main>
 
+  <script src="/static/william-activity.js"></script>
   <script src="/static/voice-ui.js"></script>
   <script>
     let webSessionId = null;
@@ -657,10 +667,10 @@
           `<li><strong>${escapeHtml(t.title)}</strong><span class="badge ${t.status}">${t.status}</span><br><small>${t.source} · ${t.created_at}</small></li>`
         ).join('');
         const more = extra > 0 ? `<li style="color:var(--muted);font-size:0.78rem">+${extra} more</li>` : '';
-        return `<details class="task-group" ${group.open ? 'open' : ''}>
-          <summary><span>${group.label}</span><span class="group-count">${items.length}</span></summary>
-          <ul>${rows}${more}</ul>
-        </details>`;
+        return `<div class="task-group${group.open ? ' open' : ''}">
+          <button type="button" class="task-group-toggle" onclick="toggleTaskGroup(this)"><span>${group.label}</span><span class="group-count">${items.length}</span></button>
+          <ul class="task-group-body">${rows}${more}</ul>
+        </div>`;
       }).filter(Boolean).join('') || '<div class="task-empty">No tasks yet</div>';
     }
 
@@ -673,7 +683,7 @@
       const health = await fetch('/api/health').then(r => r.json());
       const helper = health.macos_helper || {};
 
-      document.getElementById('agent-sub').textContent = `${health.agent} · :${health.port}`;
+      document.getElementById('agent-meta').textContent = `${health.agent} · :${health.port}`;
 
       const pills = [];
       pills.push(pill(health.ollama?.ok ? 'Ollama' : 'Ollama off', health.ollama?.ok ? 'ok' : 'off'));
@@ -838,9 +848,9 @@
       if (res.intent) extra.push(res.intent);
       if (res.deferred) extra.push('deferred');
       const tag = res.engine ? `[${res.engine}${extra.length ? '/' + extra.join('/') : ''}] ` : '';
-      let body = tag + (res.reply || res.error || JSON.stringify(res));
-      if (res.stdout && res.engine === 'terminal') body += '\n\n' + res.stdout;
-      document.getElementById('reply').textContent = body;
+      let replyText = tag + (res.reply || res.error || JSON.stringify(res));
+      if (res.stdout && res.engine === 'terminal') replyText += '\n\n' + res.stdout;
+      document.getElementById('reply').textContent = replyText;
       document.getElementById('message').value = '';
       refresh();
     };

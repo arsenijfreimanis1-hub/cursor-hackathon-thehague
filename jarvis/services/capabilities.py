@@ -12,7 +12,7 @@ CAN_DO = (
     "open apps and websites",
     "YouTube and Spotify music",
     "switch, close, and minimise windows",
-    "screenshots and screen analysis",
+    "desktop UI awareness (Accessibility — no Screen Recording)",
     "background research tasks",
     "notifications",
     "Mac terminal commands (restart services, logs, brew, git with full access)",

@@ -94,8 +94,8 @@ async def ensure_whatsapp() -> dict:
     )
     import asyncio
 
-    for _ in range(12):
-        await asyncio.sleep(5)
+    for _ in range(20):
+        await asyncio.sleep(2)
         st = await health()
         if st.get("whatsapp"):
             return {"ok": True, **st}

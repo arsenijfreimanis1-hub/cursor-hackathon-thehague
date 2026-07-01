@@ -167,8 +167,7 @@ async def capture_significant_task(
     alignment_score: float | None,
     alignment_notes: str | None,
 ) -> dict:
-    """Screenshot + Notion note for significant tasks (cursor, failed, or misaligned)."""
-    from jarvis.services import macos
+    """Notion note for significant tasks (no screenshot — Screen Recording disabled)."""
 
     significant = (
         status == "failed"
@@ -178,7 +177,6 @@ async def capture_significant_task(
     if not significant:
         return {"ok": False, "skipped": True, "reason": "not significant"}
 
-    shot = await macos.screenshot()
     return await sync_task_outcome(
         task_id=task_id,
         title=title,
@@ -186,7 +184,7 @@ async def capture_significant_task(
         status=status,
         alignment_score=alignment_score,
         alignment_notes=alignment_notes,
-        screenshot_path=shot.get("path") if shot.get("ok") else None,
+        screenshot_path=None,
     )
 
 

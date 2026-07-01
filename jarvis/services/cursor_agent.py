@@ -225,10 +225,12 @@ async def _build_full_prompt(
     *,
     domains: list[skill_domains.SkillDomain] | None = None,
 ) -> str:
-    detected = domains or skill_domains.detect_domains(prompt)
+    detected = list(domains or skill_domains.detect_domains(prompt))
+    if "cursor" not in detected:
+        detected.append("cursor")
     skill_block = skills.load_skills_block(
-        domains=detected or None,
-        include_external=bool(detected),
+        domains=detected,
+        include_external=False,
     )
     screen_block = await _screen_context_block(prompt)
     full_prompt = CURSOR_RULES

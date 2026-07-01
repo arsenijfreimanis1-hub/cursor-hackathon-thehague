@@ -17,6 +17,7 @@ from jarvis.services import (
     orchestrator,
     screen_hooks,
     security,
+    self_modify,
     sessions,
     system_control,
     terminal,
@@ -58,11 +59,12 @@ async def _build_system(
     lessons: str,
     conversation_id: str | None = None,
     messaging: bool = False,
+    use_screen_context: bool = True,
 ) -> str:
     mem = await memory.get_block(text)
     timeline = await event_log.get_timeline_block(limit=5)
     screen_block = ""
-    if settings.screen_watch_enabled and not messaging:
+    if use_screen_context and settings.screen_watch_enabled and not messaging:
         screen_block = await screen_hooks.on_user_prompt(text=text, conversation_id=conversation_id)
     memory_block = "\n\n".join(p for p in (mem, timeline, screen_block) if p)
     conversation = ""
@@ -198,8 +200,14 @@ async def route(
 
     kind = intent.classify(text) if voice else await intent.classify_async(text)
     lessons = await learning.get_lessons_block()
+    use_screen = kind != "screen" and not intent.SCREEN_HINTS.search(text)
     system = await _build_system(
-        voice=voice, text=text, lessons=lessons, conversation_id=conversation_id, messaging=messaging
+        voice=voice,
+        text=text,
+        lessons=lessons,
+        conversation_id=conversation_id,
+        messaging=messaging,
+        use_screen_context=use_screen,
     )
 
     if WAKE_ONLY.match(text.strip()):
@@ -276,6 +284,29 @@ async def route(
             "executed": False,
         }
 
+    if kind == "screen":
+        from jarvis.services import desktop
+
+        result = await desktop.observe_and_act(text, voice=voice)
+        if not result.get("ok"):
+            err = result.get("error", "Could not see the screen.")
+            return {"reply": _finish(err, voice=voice), "engine": "vision", "intent": kind}
+        if result.get("approval_id"):
+            reply = (
+                "I see it, boss. Approve the action in the panel."
+                if voice
+                else f"{result.get('description', '')} — approval #{result['approval_id']} required."
+            )
+        else:
+            reply = result.get("reply") or result.get("description", "Done, boss.")
+        return {
+            "reply": _finish(reply, voice=voice),
+            "engine": "vision",
+            "intent": kind,
+            "executed": result.get("acted", False),
+            "image_url": (result.get("steps") or [{}])[-1].get("image_url") if result.get("steps") else None,
+        }
+
     local = _local_time_reply(text, voice=voice)
     if local:
         return {"reply": local, "engine": "local", "intent": "time"}
@@ -290,7 +321,25 @@ async def route(
         routed["intent"] = kind
         return routed
 
-    if kind == "code" or cursor_agent.should_escalate(text):
+    if self_modify.looks_like_self_modify(text):
+        result = await self_modify.propose(self_modify.extract_description(text))
+        if result.get("merged") or result.get("auto_executed"):
+            reply = _finish("Updated my code and merged, boss.", voice=voice)
+        elif result.get("approval_id"):
+            reply = _finish("Sandbox ready — approve the merge in the panel, boss.", voice=voice)
+        elif result.get("ok"):
+            reply = _finish("Sandbox branch created, boss.", voice=voice)
+        else:
+            reply = _finish(result.get("error", "Self-modify failed."), voice=voice)
+        return {
+            "reply": reply,
+            "engine": "self_modify",
+            "intent": "self_modify",
+            "branch": result.get("branch"),
+            "approval_id": result.get("approval_id"),
+        }
+
+    if not messaging and (kind == "code" or cursor_agent.should_escalate(text)):
         escalated = await cursor_agent.run(f"{system}\n\nTask (be brief):\n{text}")
         if escalated.get("ok"):
             return {
@@ -304,7 +353,7 @@ async def route(
 
     if kind in ("fact", "reason") or grounding.needs_grounding(text):
         # Reasoning / planning → Cursor when configured, else web + Ollama.
-        if cursor_agent.should_reason(text) and settings.cursor_configured():
+        if not messaging and cursor_agent.should_reason(text) and settings.cursor_configured():
             cloud = await cursor_agent.run_reasoning(text)
             if cloud.get("ok"):
                 return {
@@ -316,4 +365,5 @@ async def route(
                 }
         return await _answer_facts(text, voice=voice, system=system, history=history, kind=kind)
 
-    return await _answer_chat(text, voice=voice, system=system, history=history)
+    chat_voice = voice or messaging
+    return await _answer_chat(text, voice=chat_voice, system=system, history=history)

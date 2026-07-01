@@ -8,6 +8,11 @@ def test_detect_cad_domain():
     assert "cad" in domains
 
 
+def test_detect_cursor_domain():
+    domains = skill_domains.detect_domains("refactor jarvis-core and improve yourself")
+    assert "cursor" in domains
+
+
 def test_detect_media_domain():
     domains = skill_domains.detect_domains("create a promo video with ffmpeg captions")
     assert "media" in domains

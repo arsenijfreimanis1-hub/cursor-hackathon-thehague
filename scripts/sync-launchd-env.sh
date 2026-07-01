@@ -2,6 +2,8 @@
 # Sync jarvis-core/.env values into the launchd plist (no secret printing).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/jarvis-paths.sh
+source "$ROOT/scripts/jarvis-paths.sh"
 PLIST_SRC="$ROOT/launchd/com.willy.jarvis-core.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/com.willy.jarvis-core.plist"
 ENV_FILE="$ROOT/.env"
@@ -55,5 +57,15 @@ if [[ -n "$NOTION_PAGE" ]]; then
   /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:JARVIS_NOTION_PARENT_PAGE_ID string $NOTION_PAGE" "$PLIST_DST"
 fi
 /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:JARVIS_NOTION_EXPORT_INTERVAL_HOURS string $NOTION_INTERVAL" "$PLIST_DST"
+
+/usr/libexec/PlistBuddy -c "Delete :EnvironmentVariables:JARVIS_DATA_DIR" "$PLIST_DST" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:JARVIS_DATA_DIR string $JARVIS_DATA_DIR" "$PLIST_DST"
+/usr/libexec/PlistBuddy -c "Delete :EnvironmentVariables:JARVIS_LOGS_DIR" "$PLIST_DST" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:JARVIS_LOGS_DIR string $JARVIS_LOGS_DIR" "$PLIST_DST"
+/usr/libexec/PlistBuddy -c "Delete :EnvironmentVariables:JARVIS_WORKSPACE_DIR" "$PLIST_DST" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:JARVIS_WORKSPACE_DIR string $JARVIS_ROOT" "$PLIST_DST"
+
+/usr/libexec/PlistBuddy -c "Set :StandardOutPath $JARVIS_LOGS_DIR/jarvis.log" "$PLIST_DST"
+/usr/libexec/PlistBuddy -c "Set :StandardErrorPath $JARVIS_LOGS_DIR/jarvis.err.log" "$PLIST_DST"
 
 echo "Synced launchd env → $PLIST_DST"

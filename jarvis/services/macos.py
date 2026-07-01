@@ -136,10 +136,16 @@ async def _remote_post(path: str, *, json: dict | None = None) -> dict:
 
 
 async def screenshot() -> dict:
-    result = await _helper_post("/screenshot")
-    if not result.get("ok") and "error" in result:
-        return result
-    return result
+    """Legacy — screenshots disabled; use desktop_context() instead."""
+    return await desktop_context()
+
+
+async def desktop_context() -> dict:
+    return await _helper_get("/desktop/context")
+
+
+async def desktop_press(target: str) -> dict:
+    return await _helper_post("/desktop/press", json={"target": target})
 
 
 async def mouse_move(x: float, y: float) -> dict:

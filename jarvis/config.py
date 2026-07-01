@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ROOT = Path(__file__).resolve().parent.parent
+from jarvis.paths import BACKUPS_DIR, LOGS_DIR, MODELS_DIR, ROOT, ensure_state_dirs, resolve_data_dir
 
 _PLACEHOLDER_KEYS = frozenset({"cursor_...", "cursor_…", "your_key_here", "changeme"})
 
@@ -37,8 +38,12 @@ class Settings(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = 8787
-    data_dir: Path = ROOT / "data"
+    data_dir: Path = Field(default_factory=resolve_data_dir)
     workspace_dir: Path = ROOT
+    state_root: Path = Field(default_factory=lambda: resolve_data_dir().parent)
+    logs_dir: Path = LOGS_DIR
+    models_dir: Path = MODELS_DIR
+    backups_dir: Path = BACKUPS_DIR
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_vision_model: str = "moondream"
@@ -175,4 +180,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-settings.data_dir.mkdir(parents=True, exist_ok=True)
+ensure_state_dirs(settings.data_dir)

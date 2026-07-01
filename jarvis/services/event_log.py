@@ -116,7 +116,27 @@ async def log_event(
             ),
         )
         await db.commit()
+    from jarvis.services import activity_stream
+
+    await activity_stream.broadcast(
+        {
+            "kind": event_type,
+            "title": _event_title(event_type, engine, intent),
+            "detail": (assistant_reply or user_message or "")[:500],
+            "status": task_status or "done",
+            "engine": engine,
+            "metadata": metadata or {},
+        }
+    )
     return {"id": event_id, "event_type": event_type}
+
+
+def _event_title(event_type: str, engine: str | None, intent: str | None) -> str:
+    if event_type == "integration":
+        return engine or "integration"
+    if intent:
+        return f"{event_type} · {intent}"
+    return event_type
 
 
 def _keywords(text: str) -> set[str]:

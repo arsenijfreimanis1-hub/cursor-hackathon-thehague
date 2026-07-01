@@ -1,4 +1,8 @@
-Escalate to Cursor when:
+# Cursor escalation → Cursor SDK skill
+
+William uses the **Cursor SDK skill** (`cursor-sdk.md`) — not the Cursor IDE app.
+
+Escalate via SDK when:
 - Code, build, refactor, deploy, or test work is requested.
 - Multi-step planning or comparison questions need deep reasoning.
 - Local web search returns low confidence.

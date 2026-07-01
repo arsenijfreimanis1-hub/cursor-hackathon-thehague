@@ -58,7 +58,19 @@ async def update_task_status(task_id: int, status: str) -> dict | None:
         )
         await db.commit()
         row = await (await db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))).fetchone()
-        return dict(row) if row else None
+    if row:
+        from jarvis.services import activity_stream
+
+        task = dict(row)
+        await activity_stream.emit(
+            "task",
+            (task.get("title") or f"Task #{task_id}")[:120],
+            detail=f"Status → {status}",
+            status=status,
+            engine=task.get("source"),
+            metadata={"task_id": task_id},
+        )
+    return dict(row) if row else None
 
 
 async def list_batch_tasks(batch_id: str) -> list[dict]:
