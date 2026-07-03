@@ -1,0 +1,28 @@
+{
+  "name": "BMW E46 2.8L M52TU Drift Exhaust \u2014 Valved X-Pipe",
+  "engine": "M52TU 2.8L inline-6",
+  "application": "Drift \u2014 deep / menacing tone",
+  "main_pipe_inches": 3.0,
+  "runner_inches": 2.0,
+  "tip_inches": 4.0,
+  "x_pipe_angle_deg": 55.0,
+  "valve_mode": "open (drift)",
+  "files": {
+    "stl": "bmw_e46_28l_drift_exhaust.stl",
+    "obj": "bmw_e46_28l_drift_exhaust.obj",
+    "glb": "bmw_e46_28l_drift_exhaust.glb"
+  },
+  "bounds_mm": {
+    "x": [
+      -50.0,
+      -305.5,
+      -85.62917285214924
+    ],
+    "y": [
+      1246.2970238933783,
+      290.2786201381168,
+      85.62917285214924
+    ]
+  },
+  "triangle_count": 8384
+}
