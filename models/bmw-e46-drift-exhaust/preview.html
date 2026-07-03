@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BMW E46 2.8L Drift Exhaust — 3D Preview</title>
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #0d0f12;
+      color: #e8eaed;
+      overflow: hidden;
+    }
+    #canvas { width: 100vw; height: 100vh; display: block; }
+    .hud {
+      position: fixed;
+      top: 16px; left: 16px;
+      max-width: 360px;
+      padding: 16px 18px;
+      background: rgba(12, 14, 18, 0.82);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      backdrop-filter: blur(8px);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .hud h1 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: 0.02em;
+    }
+    .hud .tag {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #c41e1e33;
+      border: 1px solid #c41e1e66;
+      color: #ff8a8a;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .hud ul { margin: 8px 0 0 16px; color: #aab0b8; }
+    .hud .hint { margin-top: 10px; color: #6b7280; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div class="hud">
+    <h1>BMW E46 2.8L Drift Exhaust</h1>
+    <div>M52TU · Valved X-pipe · 3" primaries · 4" tips</div>
+    <span class="tag">Drift mode — valves open</span>
+    <ul>
+      <li>6-2-1 stainless headers</li>
+      <li>55° X-pipe crossover</li>
+      <li>Butterfly bypass valves</li>
+      <li>Straight-through mufflers</li>
+      <li>Resonator delete mid section</li>
+    </ul>
+    <div class="hint">Drag to orbit · scroll to zoom · right-drag to pan</div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const canvas = document.getElementById('canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d0f12);
+    scene.fog = new THREE.Fog(0x0d0f12, 800, 2200);
+
+    const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 1, 5000);
+    camera.position.set(500, 320, 680);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.target.set(500, 0, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    scene.add(new THREE.AmbientLight(0x404860, 0.6));
+    const key = new THREE.DirectionalLight(0xfff4e8, 1.4);
+    key.position.set(600, 500, 400);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x6080ff, 0.5);
+    rim.position.set(-400, 200, -500);
+    scene.add(rim);
+
+    const grid = new THREE.GridHelper(1600, 32, 0x2a3040, 0x1a1e28);
+    grid.position.y = -120;
+    scene.add(grid);
+
+    const loader = new GLTFLoader();
+    loader.load('./output/bmw_e46_28l_drift_exhaust.glb', (gltf) => {
+      const model = gltf.scene;
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshStandardMaterial({
+            color: 0xb8bcc4,
+            metalness: 0.92,
+            roughness: 0.28,
+          });
+        }
+      });
+      const box = new THREE.Box3().setFromObject(model);
+      const centre = box.getCenter(new THREE.Vector3());
+      model.position.sub(centre);
+      model.position.y -= box.min.y + 120;
+      scene.add(model);
+    });
+
+    function onResize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    }
+    addEventListener('resize', onResize);
+
+    (function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+  </script>
+</body>
+</html>
