@@ -55,6 +55,7 @@ pnpm install
 
 | Time (CET) | Who | Summary | Needs |
 |------------|-----|---------|-------|
+| 2026-07-03 22:55 | Cursor | BMW E46 2.8L drift exhaust 3D model (valved X-pipe) in `models/bmw-e46-drift-exhaust/` | Optional: open `models/bmw-e46-drift-exhaust/preview.html` for 3D view |
 | 2026-06-26 15:30 | Willy | Merged Rekentafel MVP monorepo (guest/staff web, API, waiter Capacitor, QR demo, i18n) | MacBook: clone + `pnpm install` + see Rekentafel section |
 | 2026-06-26 12:30 | AJ | Unified `CURSOR_PROMPT.md` for all devs (no role split); Mobbin MCP added; equal developer model | Everyone: paste `CURSOR_PROMPT.md`, use own keys in `.env.local` |
 | 2026-06-26 12:00 | AJ | Member folders, Competitor Watchdog, integration API | — |
