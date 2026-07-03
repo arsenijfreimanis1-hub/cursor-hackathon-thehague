@@ -55,6 +55,7 @@ pnpm install
 
 | Time (CET) | Who | Summary | Needs |
 |------------|-----|---------|-------|
+| 2026-07-04 00:40 | cursor | Documented William Agent (Jarvis) cloud dev setup: `.venv` + `pip install -r requirements*.txt`, run `uvicorn jarvis.main:app :8787`, `pytest`; added `AGENTS.md` | See `AGENTS.md` → Cursor Cloud specific instructions |
 | 2026-06-26 15:30 | Willy | Merged Rekentafel MVP monorepo (guest/staff web, API, waiter Capacitor, QR demo, i18n) | MacBook: clone + `pnpm install` + see Rekentafel section |
 | 2026-06-26 12:30 | AJ | Unified `CURSOR_PROMPT.md` for all devs (no role split); Mobbin MCP added; equal developer model | Everyone: paste `CURSOR_PROMPT.md`, use own keys in `.env.local` |
 | 2026-06-26 12:00 | AJ | Member folders, Competitor Watchdog, integration API | — |
